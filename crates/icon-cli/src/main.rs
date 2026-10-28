@@ -19,6 +19,7 @@ struct Args {
     screen: Option<String>,
     floppy: Option<String>,
     regions: usize,
+    swaps: Vec<(f64, String)>,
     lan: Option<f64>,
     ws_screen: Option<String>,
     type_text: Vec<(f64, String)>,
@@ -50,6 +51,7 @@ fn parse_args() -> Args {
         screen: None,
         floppy: None,
         regions: 0,
+        swaps: Vec::new(),
         lan: None,
         ws_screen: None,
         type_text: Vec::new(),
@@ -71,6 +73,12 @@ fn parse_args() -> Args {
             "--screen" => a.screen = Some(v()),
             "--floppy" => a.floppy = Some(v()),
             "--regions" => a.regions = parse_num(&v()) as usize,
+            "--swap" => {
+                // --swap SECONDS:IMAGE  (insert a different floppy)
+                let s = v();
+                let (t, p) = s.split_once(':').expect("--swap SECONDS:IMAGE");
+                a.swaps.push((t.parse().unwrap(), p.to_string()));
+            }
             "--lan" => a.lan = Some(v().parse().unwrap()),
             "--ws-screen" => a.ws_screen = Some(v()),
             "--type" => {
@@ -140,6 +148,11 @@ fn main() {
                 r.cs, r.ip, r.ax, r.bx, r.cx, r.dx, r.si, r.di, r.bp, r.sp, r.ds, r.es, r.flags);
             tracing -= 1;
             if tracing == 0 { m.board.io_log = None; }
+        }
+        if let Some(i) = args.swaps.iter().position(|(t, _)| m.board.cycles as f64 >= t * CPU_HZ as f64) {
+            let (_, p) = args.swaps.remove(i);
+            let d = Disk::floppy_from_image(std::fs::read(&p).expect("read floppy")).expect("floppy size");
+            m.board.insert_floppy(Some(d));
         }
         if let Some(i) = args.type_text.iter().position(|(t, _)| m.board.cycles as f64 >= t * CPU_HZ as f64) {
             let (_, text) = args.type_text.remove(i);
