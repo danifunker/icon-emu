@@ -27,6 +27,10 @@ pub struct Com9026 {
     pub tx_page: Option<u8>,
     in_reset: bool,
     recon_at: Option<u64>,
+    /// When a pending transmit finishes (no other nodes yet: it completes
+    /// unacknowledged, i.e. TA set and TMA clear, as with an absent target).
+    tx_done_at: Option<u64>,
+    now: u64,
 }
 
 impl Default for Com9026 {
@@ -40,6 +44,8 @@ impl Default for Com9026 {
             tx_page: None,
             in_reset: false,
             recon_at: None,
+            tx_done_at: None,
+            now: 0,
         }
     }
 }
@@ -65,6 +71,14 @@ impl Com9026 {
     }
 
     pub fn tick(&mut self, now: u64) {
+        self.now = now;
+        if let Some(t) = self.tx_done_at {
+            if now >= t {
+                self.tx_done_at = None;
+                self.tx_page = None;
+                self.status |= ST_TA;
+            }
+        }
         if let Some(t) = self.recon_at {
             if now >= t {
                 self.status |= ST_RECON;
@@ -93,10 +107,11 @@ impl Com9026 {
                 self.status |= ST_RI;
             }
             0x03 => {
-                // Enable transmit from page nn. A lone node never gets the
-                // token, so without a network the transmit never completes.
+                // Enable transmit from page nn.
                 self.tx_page = Some((v >> 3) & 3);
                 self.status &= !(ST_TA | ST_TMA);
+                // Free-buffer enquiry with no reply, then give up: ~1 ms.
+                self.tx_done_at = Some(self.now + 7_000);
             }
             0x04 => {
                 self.rx_page = Some(((v >> 3) & 3, v & 0x80 != 0));

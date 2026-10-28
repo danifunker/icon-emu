@@ -3,6 +3,7 @@
 //! a guessed frame buffer.
 
 use icon_core::devices::nvram::presets;
+use icon_core::devices::wd1002::Disk;
 use icon_core::machine::{Config, Machine, CPU_HZ, STRAPS_NORMAL};
 use std::collections::HashMap;
 use std::io::Write;
@@ -16,6 +17,11 @@ struct Args {
     trace_last: usize,
     dump_ram: Option<String>,
     screen: Option<String>,
+    floppy: Option<String>,
+    regions: usize,
+    trace_from: Option<u32>,
+    trace_count: usize,
+    hd: Option<String>,
 }
 
 fn parse_num(s: &str) -> u32 {
@@ -39,6 +45,11 @@ fn parse_args() -> Args {
         trace_last: 32,
         dump_ram: None,
         screen: None,
+        floppy: None,
+        regions: 0,
+        trace_from: None,
+        trace_count: 2000,
+        hd: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -52,8 +63,13 @@ fn parse_args() -> Args {
             "--trace-last" => a.trace_last = parse_num(&v()) as usize,
             "--dump-ram" => a.dump_ram = Some(v()),
             "--screen" => a.screen = Some(v()),
+            "--floppy" => a.floppy = Some(v()),
+            "--regions" => a.regions = parse_num(&v()) as usize,
+            "--trace-from" => a.trace_from = Some(parse_num(&v())),
+            "--trace-count" => a.trace_count = parse_num(&v()) as usize,
+            "--hd" => a.hd = Some(v()),
             "-h" | "--help" => {
-                println!("icon-cli [--rom F] [--preset ws|fs] [--seconds S] [--ram-kb N] [--straps 0x1F]\n         [--trace-last N] [--dump-ram F] [--screen F.ppm]");
+                println!("icon-cli [--rom F] [--preset ws|fs] [--seconds S] [--ram-kb N] [--straps 0x1F]\n         [--trace-last N] [--dump-ram F] [--screen F.ppm] [--floppy F.img] [--hd F.img]");
                 std::process::exit(0);
             }
             _ => panic!("unknown argument {k}"),
@@ -70,14 +86,51 @@ fn main() {
         "fs" => presets::fileserver(),
         p => panic!("unknown preset {p}"),
     };
-    let mut m = Machine::new(Config { rom, ram_kb: args.ram_kb, nvram, straps: args.straps });
+    let fs = args.preset == "fs";
+    let _ = fs;
+    let mut m = Machine::new(Config { rom, patch_800k_floppy: false, ram_kb: args.ram_kb, nvram, straps: args.straps });
+    if let Some(p) = &args.floppy {
+        let d = Disk::floppy_from_image(std::fs::read(p).expect("read floppy")).expect("unknown floppy size");
+        m.board.insert_floppy(Some(d));
+    }
+    if let Some(p) = &args.hd {
+        m.board.attach_hard_disk(Some(Disk::hard_from_image(std::fs::read(p).expect("read hd"), 4, 17)));
+    }
 
     let total = (args.seconds * CPU_HZ as f64) as u64;
     let mut ring: Vec<u32> = Vec::with_capacity(args.trace_last);
     let mut hot: HashMap<u32, u64> = HashMap::new();
     let mut instr = 0u64;
+    let mut last_region = u32::MAX;
+    let mut region_logs = 0usize;
+    let mut tracing = 0usize;
     while m.board.cycles < total {
         let pc = m.cpu.pc();
+        if tracing == 0 && args.trace_from == Some(pc) {
+            tracing = args.trace_count;
+            m.board.io_log = Some(Vec::new());
+        }
+        if tracing > 0 {
+            let r = m.cpu.regs();
+            let io: Vec<String> = m.board.io_log.as_mut().map(|l| l.drain(..).map(|(_, p, v, w)| format!("{}{p:04X}={v:02X}", if w { "out " } else { "in " })).collect()).unwrap_or_default();
+            if !io.is_empty() {
+                println!("        io: {}", io.join(" "));
+            }
+            println!("T {:04X}:{:04X} AX={:04X} BX={:04X} CX={:04X} DX={:04X} SI={:04X} DI={:04X} BP={:04X} SP={:04X} DS={:04X} ES={:04X} FL={:04X}",
+                r.cs, r.ip, r.ax, r.bx, r.cx, r.dx, r.si, r.di, r.bp, r.sp, r.ds, r.es, r.flags);
+            tracing -= 1;
+            if tracing == 0 { m.board.io_log = None; }
+        }
+        if region_logs < args.regions && pc >> 12 != last_region {
+            let r = m.cpu.regs();
+            let prev = ring.last().copied().unwrap_or(0);
+            println!(
+                "[{:>10}] {prev:05X} -> {pc:05X}  CS={:04X} IP={:04X} AX={:04X} BX={:04X} CX={:04X} DX={:04X} SP={:04X} SS={:04X} DS={:04X} ES={:04X}",
+                m.board.cycles, r.cs, r.ip, r.ax, r.bx, r.cx, r.dx, r.sp, r.ss, r.ds, r.es
+            );
+            last_region = pc >> 12;
+            region_logs += 1;
+        }
         if ring.len() == args.trace_last {
             ring.remove(0);
         }

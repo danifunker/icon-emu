@@ -18,6 +18,8 @@
   button.power.on { background: var(--amber); color: #222; border-color: var(--amber); }
   .led { width: 12px; height: 12px; border-radius: 50%; background: #4a4220; display: inline-block; }
   .led.on { background: var(--led); box-shadow: 0 0 8px var(--led); }
+  .file .btn { background: #3a3e46; border: 1px solid #555; border-radius: 6px; padding: 6px 14px; cursor: pointer; display: inline-block; }
+  .muted { color: var(--muted); }
   #status { font-family: ui-monospace, monospace; color: var(--muted); }
 </style>
 </head>
@@ -28,6 +30,8 @@
     <div class="bezel"><canvas id="screen" width="640" height="240"></canvas></div>
     <div class="controls">
       <button id="power" class="power">Power</button>
+      <label class="file"><input id="floppy" type="file" accept=".img" hidden><span class="btn">Load floppy…</span></label>
+      <span id="floppy-name" class="muted">no diskette</span>
       <span>trouble <span id="led" class="led"></span></span>
       <span id="status">off</span>
     </div>

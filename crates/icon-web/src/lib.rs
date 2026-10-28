@@ -1,6 +1,7 @@
 //! WebAssembly front end: one emulated machine per `Emu` instance.
 
 use icon_core::devices::nvram::presets;
+use icon_core::devices::wd1002::Disk;
 use icon_core::machine::{Config, Machine, CPU_HZ, STRAPS_NORMAL};
 use wasm_bindgen::prelude::*;
 
@@ -22,7 +23,7 @@ impl Emu {
             _ => presets::workstation(),
         };
         Ok(Emu {
-            m: Machine::new(Config { rom: rom.to_vec(), ram_kb: 512, nvram, straps: STRAPS_NORMAL }),
+            m: Machine::new(Config { rom: rom.to_vec(), patch_800k_floppy: false, ram_kb: 512, nvram, straps: STRAPS_NORMAL }),
         })
     }
 
@@ -34,6 +35,18 @@ impl Emu {
     /// The display as 640x240 RGBA.
     pub fn screen(&self) -> Vec<u8> {
         self.m.board.render_rgba()
+    }
+
+    /// Insert a floppy image into the fileserver's drive (drive 2:).
+    pub fn insert_floppy(&mut self, data: &[u8]) -> Result<(), JsError> {
+        let disk = Disk::floppy_from_image(data.to_vec())
+            .ok_or_else(|| JsError::new("unrecognised floppy image size"))?;
+        self.m.board.insert_floppy(Some(disk));
+        Ok(())
+    }
+
+    pub fn eject_floppy(&mut self) {
+        self.m.board.insert_floppy(None);
     }
 
     /// Queue a raw ICON key code (key number; bit 7 set = release).

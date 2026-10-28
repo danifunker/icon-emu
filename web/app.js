@@ -9,6 +9,15 @@ const status = document.getElementById("status");
 
 let rom = null;
 let emu = null;
+let floppy = null; // { name, data }
+
+document.getElementById("floppy").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  floppy = { name: file.name, data: new Uint8Array(await file.arrayBuffer()) };
+  document.getElementById("floppy-name").textContent = file.name;
+  if (emu) emu.insert_floppy(floppy.data);
+});
 
 function frame() {
   if (!emu) return;
@@ -31,6 +40,7 @@ powerBtn.addEventListener("click", () => {
     return;
   }
   emu = new Emu(rom, "fs");
+  if (floppy) emu.insert_floppy(floppy.data);
   powerBtn.classList.add("on");
   requestAnimationFrame(frame);
 });

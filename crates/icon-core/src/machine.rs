@@ -11,7 +11,7 @@
 //! file, FAC1–FAC7 PPI B, FAE1–FAE7 serial.
 
 use crate::cpu::{CpuBus, I80186};
-use crate::devices::{arcnet::Com9026, counter::MwCounter, crtc::Crtc, nvram::Nvram, ppi8255::Ppi8255, serial::Sio8274};
+use crate::devices::{arcnet::Com9026, counter::MwCounter, crtc::Crtc, nvram::Nvram, ppi8255::Ppi8255, serial::Sio8274, wd1002::{Disk, Wd1002}};
 use std::collections::VecDeque;
 
 /// CPU clock: 14.318 MHz crystal / 2.
@@ -23,6 +23,10 @@ pub const STRAPS_NORMAL: u8 = 0x1F;
 
 pub struct Config {
     pub rom: Vec<u8>,
+    /// Patch the ROM floppy loader for 10-sector (800K) disks. The real
+    /// fileservers had a later ROM (Rel. 2.11) that could boot them; the
+    /// 5053 ISS 2 loader only handles 8 sectors per track.
+    pub patch_800k_floppy: bool,
     pub ram_kb: u32,
     pub nvram: [u16; 16],
     pub straps: u8,
@@ -40,6 +44,7 @@ pub struct Board {
     pub counters: [MwCounter; 4],
     pub crtc: Crtc,
     pub sio: Sio8274,
+    pub wd: Wd1002,
     pub arcnet: Com9026,
     pub palette: [u8; 4],
     pub straps: u8,
@@ -54,6 +59,8 @@ pub struct Board {
     kbd_pending: bool,
     /// Cycle counter, used for video timing.
     pub cycles: u64,
+    /// When set, every I/O access is appended here: (cycle, port, value, is_write).
+    pub io_log: Option<Vec<(u64, u16, u8, bool)>>,
     /// Unhandled I/O accesses seen, for discovering missing hardware.
     pub unknown_io: std::collections::BTreeMap<u16, u32>,
 }
@@ -66,6 +73,10 @@ pub struct Machine {
 impl Machine {
     pub fn new(cfg: Config) -> Self {
         assert_eq!(cfg.rom.len(), 0x8000, "expected a 32 KB interleaved ICON ROM");
+        let mut cfg = cfg;
+        if cfg.patch_800k_floppy {
+            patch_800k_floppy(&mut cfg.rom);
+        }
         let board = Board {
             ram: vec![0; (cfg.ram_kb as usize) * 1024],
             rom: cfg.rom,
@@ -75,6 +86,7 @@ impl Machine {
             counters: Default::default(),
             crtc: Crtc::default(),
             sio: Sio8274::default(),
+            wd: Wd1002::default(),
             arcnet: Com9026::default(),
             palette: [0; 4],
             // At power-up the keyboard reports CAPS LOCK and CUR LOCK released.
@@ -85,6 +97,7 @@ impl Machine {
             fa88: 0,
             fa88_edges: 0,
             cycles: 0,
+            io_log: None,
             unknown_io: Default::default(),
         };
         let mut cpu = I80186::new();
@@ -97,10 +110,11 @@ impl Machine {
         let c = self.cpu.step(&mut self.board);
         self.board.cycles += c as u64;
         self.board.arcnet.tick(self.board.cycles);
+        self.board.wd.tick(c);
         self.board.service_keyboard();
         // INT0 is shared by the keyboard (PA7) and disk (PA5); the kernel's
         // handler polls PPI A port A. The COM9026 (PC5) is on INT2.
-        self.cpu.set_int_line(0, self.board.kbd_pending);
+        self.cpu.set_int_line(0, self.board.kbd_pending || self.board.wd.irq);
         self.cpu.set_int_line(2, self.board.arcnet.irq());
         c
     }
@@ -114,7 +128,32 @@ impl Machine {
     }
 }
 
+/// Change the WD1002 floppy loader (ROM file 0x170) from 80x2x8 to 80x2x10:
+/// its block limit (0x500 -> 0x640), sectors per cylinder (16 -> 20) and the
+/// per-track sector bound (9 -> 11).
+fn patch_800k_floppy(rom: &mut [u8]) {
+    let patches: [(usize, &[u8], &[u8]); 4] = [
+        (0x1F1, &[0x3D, 0x00, 0x05], &[0x3D, 0x40, 0x06]),
+        (0x1F8, &[0xBB, 0x10, 0x00], &[0xBB, 0x14, 0x00]),
+        (0x201, &[0xBB, 0x08, 0x00], &[0xBB, 0x0A, 0x00]),
+        (0x22C, &[0x83, 0x7E, 0x04, 0x09], &[0x83, 0x7E, 0x04, 0x0B]),
+    ];
+    for (off, old, new) in patches {
+        if &rom[off..off + old.len()] == old {
+            rom[off..off + new.len()].copy_from_slice(new);
+        }
+    }
+}
+
 impl Board {
+    pub fn insert_floppy(&mut self, disk: Option<Disk>) {
+        self.wd.drives[3] = disk;
+    }
+
+    pub fn attach_hard_disk(&mut self, disk: Option<Disk>) {
+        self.wd.drives[0] = disk;
+    }
+
     /// Vertical sync, derived from elapsed cycles and the CRTC frame length.
     fn vsync(&self) -> bool {
         let frame = (CPU_HZ / FRAME_HZ) as u64;
@@ -193,7 +232,10 @@ impl Board {
     }
 
     fn ppi_a_inputs(&self) -> [u8; 3] {
-        let mut pa = self.straps; // bit 5 = disk IRQ (idle low)
+        let mut pa = self.straps;
+        if self.wd.irq {
+            pa |= 0x20;
+        }
         if self.kbd_pending {
             pa |= 0x80;
         }
@@ -264,9 +306,27 @@ impl CpuBus for Board {
     }
 
     fn io_read8(&mut self, port: u16) -> u8 {
+        let v = self.io_read8_inner(port);
+        if let Some(log) = self.io_log.as_mut() {
+            log.push((self.cycles, port, v, false));
+        }
+        v
+    }
+
+    fn io_write8(&mut self, port: u16, val: u8) {
+        if let Some(log) = self.io_log.as_mut() {
+            log.push((self.cycles, port, val, true));
+        }
+        self.io_write8_inner(port, val)
+    }
+}
+
+impl Board {
+    fn io_read8_inner(&mut self, port: u16) -> u8 {
         match port {
             0xF803 => self.crtc.read_data(),
             0xF920 => self.kbd_latch,
+            0xFAA0..=0xFAAE if port & 1 == 0 => self.wd.read(((port - 0xFAA0) >> 1) as u8),
             0xFAE1 => self.sio.ch[0].read_data(),
             0xFAE3 => self.sio.ch[1].read_data(),
             0xFAE5 => self.sio.ch[0].read_control(),
@@ -286,13 +346,14 @@ impl CpuBus for Board {
         }
     }
 
-    fn io_write8(&mut self, port: u16, val: u8) {
+    fn io_write8_inner(&mut self, port: u16, val: u8) {
         match port {
             0xF801 => self.crtc.write_addr(val),
             0xF803 => self.crtc.write_data(val),
             0xF880 => self.arcnet.write_mask(val),
             0xF882 => self.arcnet.command(val),
             0xF920 => self.kbd_pending = false,
+            0xFAA0..=0xFAAE if port & 1 == 0 => self.wd.write(((port - 0xFAA0) >> 1) as u8, val),
             0xFAE1 => self.sio.ch[0].write_data(val),
             0xFAE3 => self.sio.ch[1].write_data(val),
             0xFAE5 => self.sio.ch[0].write_control(val),
