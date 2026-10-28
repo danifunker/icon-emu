@@ -4,7 +4,7 @@ members = ["crates/icon-core", "crates/icon-cli", "crates/icon-web"]
 
 [workspace.package]
 edition = "2021"
-license = "MIT OR Apache-2.0"
+license = "MIT AND BSD-3-Clause"
 
 [profile.release]
 opt-level = 3

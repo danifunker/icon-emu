@@ -1,0 +1,32 @@
+MIT License
+
+Copyright (c) 2026 Dani Sarfati
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+
+The 8086/80186 CPU core (crates/icon-core/src/cpu/i86.rs and i186.rs) is a port
+of MAME code and remains under the BSD 3-Clause license; see THIRD_PARTY.md.
+
+This license covers the emulator's source code only. It does not cover the
+ICON boot ROM, QNX, or any Unisys/CEMCORP software or disk images, which are
+not distributed with this repository. disks/hd64-factory.bin contains blocks
+written by the ICON's own hdformat/fdisk tools, including part of the QNX
+hard-disk loader, and is not covered by this license.
