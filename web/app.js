@@ -30,7 +30,7 @@ powerBtn.addEventListener("click", () => {
     led.classList.remove("on");
     return;
   }
-  emu = new Emu(rom, "ws");
+  emu = new Emu(rom, "fs");
   powerBtn.classList.add("on");
   requestAnimationFrame(frame);
 });

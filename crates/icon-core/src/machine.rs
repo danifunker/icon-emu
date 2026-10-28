@@ -11,7 +11,7 @@
 //! file, FAC1–FAC7 PPI B, FAE1–FAE7 serial.
 
 use crate::cpu::{CpuBus, I80186};
-use crate::devices::{arcnet::Com9026, crtc::Crtc, nvram::Nvram, ppi8255::Ppi8255};
+use crate::devices::{arcnet::Com9026, counter::MwCounter, crtc::Crtc, nvram::Nvram, ppi8255::Ppi8255, serial::Sio8274};
 use std::collections::VecDeque;
 
 /// CPU clock: 14.318 MHz crystal / 2.
@@ -34,7 +34,12 @@ pub struct Board {
     pub ppi_a: Ppi8255,
     pub ppi_b: Ppi8255,
     pub nvram: Nvram,
+    /// Microwire counter chips, indexed by the select field (PPI A port B
+    /// bits 7..6): 0 = trackball Y, 1 = trackball X, 3 = baud-rate. Select 2
+    /// is the NVRAM.
+    pub counters: [MwCounter; 4],
     pub crtc: Crtc,
+    pub sio: Sio8274,
     pub arcnet: Com9026,
     pub palette: [u8; 4],
     pub straps: u8,
@@ -67,7 +72,9 @@ impl Machine {
             ppi_a: Ppi8255::default(),
             ppi_b: Ppi8255::default(),
             nvram: Nvram::new(cfg.nvram),
+            counters: Default::default(),
             crtc: Crtc::default(),
+            sio: Sio8274::default(),
             arcnet: Com9026::default(),
             palette: [0; 4],
             // At power-up the keyboard reports CAPS LOCK and CUR LOCK released.
@@ -130,10 +137,12 @@ impl Board {
         }
     }
 
-    /// Microwire device select on PPI A port B bits 7..5:
-    /// 100 = NVRAM, 000 = trackball Y counter, 010 = X counter, xx1 = idle.
-    fn microwire_select(&self) -> u8 {
-        (self.ppi_a.port_b_out() >> 5) & 7
+    /// Microwire device on PPI A port B: bits 7..6 select (00 trackball Y,
+    /// 01 trackball X, 10 NVRAM, 11 baud-rate counter), bit 5 is an active-low
+    /// enable. Returns the selected device while enabled.
+    fn microwire_select(&self) -> Option<u8> {
+        let pb = self.ppi_a.port_b_out();
+        (pb & 0x20 == 0).then_some(pb >> 6)
     }
 
     /// Start of the visible page: NVRAM word 0 bits 0-1 pick the bank, and
@@ -192,7 +201,12 @@ impl Board {
         if self.arcnet.irq() {
             pc |= 0x20;
         }
-        if self.microwire_select() == 0b100 && self.nvram.data_out() {
+        let mw_do = match self.microwire_select() {
+            Some(2) => self.nvram.data_out(),
+            Some(n) => self.counters[n as usize].data_out(),
+            None => false,
+        };
+        if mw_do {
             pc |= 0x40;
         }
         if self.vsync() {
@@ -205,8 +219,14 @@ impl Board {
     fn update_pins(&mut self) {
         let pb = self.ppi_a.port_b_out();
         let pc = self.ppi_a.port_c_out();
-        let sel = (pb >> 5) & 7;
-        self.nvram.set_pins(sel == 0b100, pc & 0x02 != 0, pc & 0x01 != 0);
+        let sel = self.microwire_select();
+        let (sk, di) = (pc & 0x02 != 0, pc & 0x01 != 0);
+        self.nvram.set_pins(sel == Some(2), sk, di);
+        for (i, c) in self.counters.iter_mut().enumerate() {
+            if i != 2 {
+                c.set_pins(sel == Some(i as u8), sk, di);
+            }
+        }
         self.arcnet.set_reset(pb & 0x02 != 0, self.ppi_b.port_a_out(), self.cycles);
     }
 
@@ -247,6 +267,10 @@ impl CpuBus for Board {
         match port {
             0xF803 => self.crtc.read_data(),
             0xF920 => self.kbd_latch,
+            0xFAE1 => self.sio.ch[0].read_data(),
+            0xFAE3 => self.sio.ch[1].read_data(),
+            0xFAE5 => self.sio.ch[0].read_control(),
+            0xFAE7 => self.sio.ch[1].read_control(),
             0xF880 => self.arcnet.read_status(),
             0xF981 | 0xF983 | 0xF985 | 0xF987 => {
                 let inputs = self.ppi_a_inputs();
@@ -269,6 +293,10 @@ impl CpuBus for Board {
             0xF880 => self.arcnet.write_mask(val),
             0xF882 => self.arcnet.command(val),
             0xF920 => self.kbd_pending = false,
+            0xFAE1 => self.sio.ch[0].write_data(val),
+            0xFAE3 => self.sio.ch[1].write_data(val),
+            0xFAE5 => self.sio.ch[0].write_control(val),
+            0xFAE7 => self.sio.ch[1].write_control(val),
             0xF900 | 0xF902 | 0xF904 | 0xF906 => {
                 self.palette[((port - 0xF900) >> 1) as usize] = val & 0x0F
             }
