@@ -11,7 +11,7 @@
 //! file, FAC1–FAC7 PPI B, FAE1–FAE7 serial.
 
 use crate::cpu::{CpuBus, I80186};
-use crate::devices::{arcnet::Com9026, counter::MwCounter, crtc::Crtc, nvram::Nvram, ppi8255::Ppi8255, serial::Sio8274, wd1002::{Disk, Wd1002}};
+use crate::devices::{arcnet::Com9026, counter::MwCounter, crtc::Crtc, nvram::Nvram, ppi8255::Ppi8255, serial::Sio8274, wd1002::{Disk, Wd1002}, rtc::Msm5832};
 use std::collections::VecDeque;
 
 /// CPU clock: 14.318 MHz crystal / 2.
@@ -30,6 +30,8 @@ pub struct Config {
     pub ram_kb: u32,
     pub nvram: [u16; 16],
     pub straps: u8,
+    /// Host wall-clock time (Unix seconds) at power-on, for the RTC.
+    pub host_time: i64,
 }
 
 pub struct Board {
@@ -45,6 +47,9 @@ pub struct Board {
     pub crtc: Crtc,
     pub sio: Sio8274,
     pub wd: Wd1002,
+    pub rtc: Msm5832,
+    /// FA80-FA8E addressable latch outputs (bit 0 of each write).
+    latch_fa8x: [bool; 8],
     pub arcnet: Com9026,
     pub palette: [u8; 4],
     pub straps: u8,
@@ -95,6 +100,8 @@ impl Machine {
             crtc: Crtc::default(),
             sio: Sio8274::default(),
             wd: Wd1002::default(),
+            rtc: Msm5832::new(cfg.host_time),
+            latch_fa8x: [false; 8],
             arcnet: Com9026::default(),
             palette: [0; 4],
             // At power-up the keyboard reports CAPS LOCK and CUR LOCK released.
@@ -394,6 +401,12 @@ impl Board {
             0xF803 => self.crtc.read_data(),
             0xF920 => self.kbd_latch,
             0xFAA0..=0xFAAE if port & 1 == 0 => self.wd.read(((port - 0xFAA0) >> 1) as u8),
+            // RTC data, valid while READ (FA82 = 0) is asserted.
+            0xFA80 => {
+                let reg = self.ppi_b.latch[1] & 0x0F;
+                let secs = (self.cycles / CPU_HZ as u64) as i64;
+                0xF0 | self.rtc.read(reg, secs)
+            }
             0xFAE1 => self.sio.ch[0].read_data(),
             0xFAE3 => self.sio.ch[1].read_data(),
             0xFAE5 => self.sio.ch[0].read_control(),
@@ -431,6 +444,17 @@ impl Board {
             0xF981 | 0xF983 | 0xF985 | 0xF987 => {
                 self.ppi_a.write(((port - 0xF981) >> 1) as u8, val);
                 self.update_pins();
+            }
+            0xFA80..=0xFA8E if port & 1 == 0 && port != 0xFA88 => {
+                let i = ((port - 0xFA80) >> 1) as usize;
+                let bit = val & 1 != 0;
+                // FA84 falling edge with FA80 set: RTC write strobe.
+                if i == 2 && self.latch_fa8x[2] && !bit && self.latch_fa8x[0] {
+                    let b = self.ppi_b.latch[1];
+                    let secs = (self.cycles / CPU_HZ as u64) as i64;
+                    self.rtc.write(b & 0x0F, b >> 4, secs);
+                }
+                self.latch_fa8x[i] = bit;
             }
             0xFA88 => {
                 if val != self.fa88 {

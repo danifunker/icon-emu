@@ -96,7 +96,7 @@ fn main() {
     };
     let fs = args.preset == "fs";
     let _ = fs;
-    let mut m = Machine::new(Config { rom, patch_800k_floppy: false, ram_kb: args.ram_kb, nvram, straps: args.straps });
+    let mut m = Machine::new(Config { rom, patch_800k_floppy: false, ram_kb: args.ram_kb, nvram, straps: args.straps, host_time: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) });
     if let Some(p) = &args.floppy {
         let d = Disk::floppy_from_image(std::fs::read(p).expect("read floppy")).expect("unknown floppy size");
         m.board.insert_floppy(Some(d));

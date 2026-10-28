@@ -14,7 +14,7 @@ pub struct Emu {
 impl Emu {
     /// Power on a machine. `preset` is "ws" (workstation) or "fs" (fileserver).
     #[wasm_bindgen(constructor)]
-    pub fn new(rom: &[u8], preset: &str) -> Result<Emu, JsError> {
+    pub fn new(rom: &[u8], preset: &str, host_time: f64) -> Result<Emu, JsError> {
         if rom.len() != 0x8000 {
             return Err(JsError::new("expected the 32 KB interleaved ICON ROM"));
         }
@@ -23,7 +23,7 @@ impl Emu {
             _ => presets::workstation(),
         };
         Ok(Emu {
-            m: Machine::new(Config { rom: rom.to_vec(), patch_800k_floppy: false, ram_kb: 512, nvram, straps: STRAPS_NORMAL }),
+            m: Machine::new(Config { rom: rom.to_vec(), patch_800k_floppy: false, ram_kb: 512, nvram, straps: STRAPS_NORMAL, host_time: host_time as i64 }),
         })
     }
 

@@ -138,7 +138,7 @@ powerBtn.addEventListener("click", () => {
     for (const l of [led, hdLed, fdLed]) l.classList.remove("on");
     return;
   }
-  emu = new Emu(rom, "fs");
+  emu = new Emu(rom, "fs", Date.now() / 1000 - new Date().getTimezoneOffset() * 60);
   if (floppy) emu.insert_floppy(floppy.data);
   powerBtn.classList.add("on");
   powerBtn.blur(); // keep Space/Enter going to the emulator
