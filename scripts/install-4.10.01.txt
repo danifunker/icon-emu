@@ -1,0 +1,59 @@
+0 fs power
+30 fs floppy DISKS/System 4.10.01/ICON_SERIES_ICON_NETCARD_FILESERVER_BOOT_DISK_4.10.01_EXCEPTION_REL._SEP_17_1991_DISK_1_OF_1.img
+32 ws power
+90 shot b410
+95 ws type root\r
+99 ws type superuser\r
+110 fs floppy DISKS/System 4.10.01/ICON_SERIES_CONFIGURATION_DISKETTE_4.10.01_EXCEPTION_REL._SEP_17_1991_DISK_1_OF_1.img
+115 ws type configure\r
+150 shot b410c
+151 ws mouse 42 0
+152 ws key 45
+152.2 ws key C5
+195 shot c1
+200 ws mouse 42 0
+201 ws key 45
+201.2 ws key C5
+250 shot c2
+255 ws mouse 112 94
+256 shot c3
+257 ws key 45
+257.2 ws key C5
+300 shot c4
+301 ws mouse 39 0
+302 ws key 45
+302.2 ws key C5
+340 shot d1
+450 shot d2
+600 shot d3
+601 ws type \r
+620 shot e1
+622 fs floppy DISKS/System 4.10.01/ICON_SERIES_SYSTEM_SW_DISKETTE_4.10.01_EXCEPTION_REL._SEP_17_1991_DISK_1_OF_5.img
+625 ws key 45
+625.2 ws key C5
+700 fs floppy DISKS/System 4.10.01/ICON_SERIES_SYSTEM_SW_DISKETTE_4.10.01_EXCEPTION_REL._SEP_17_1991_DISK_2_OF_5.img
+702 ws type \r
+815 shot g2
+820 fs floppy DISKS/System 4.10.01/ICON_SERIES_SYSTEM_SW_DISKETTE_4.10.01_EXCEPTION_REL._SEP_17_1991_DISK_3_OF_5.img
+822 ws type \r
+935 shot g3
+940 fs floppy DISKS/System 4.10.01/ICON_SERIES_SYSTEM_SW_DISKETTE_4.10.01_EXCEPTION_REL._SEP_17_1991_DISK_4_OF_5.img
+942 ws type \r
+1055 shot g4
+1060 fs floppy DISKS/System 4.10.01/ICON_SERIES_SYSTEM_SW_DISKETTE_4.10.01_EXCEPTION_REL._SEP_17_1991_DISK_5_OF_5.img
+1062 ws type \r
+1175 shot g5
+1300 shot g6
+1301 ws type \r
+1340 shot h1
+1341 ws key 45
+1341.2 ws key C5
+1345 fs eject
+1346 save lexicon-4.10.01-installed.img
+1350 fs power
+1352 fs power
+1420 shot i1
+1460 shot i2
+1470 ws power
+1472 ws power
+1560 shot i3

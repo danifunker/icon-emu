@@ -19,6 +19,8 @@ struct Args {
     screen: Option<String>,
     floppy: Option<String>,
     regions: usize,
+    script: Option<String>,
+    hd_out: Option<String>,
     swaps: Vec<(f64, String)>,
     lan: Option<f64>,
     ws_screen: Option<String>,
@@ -51,6 +53,8 @@ fn parse_args() -> Args {
         screen: None,
         floppy: None,
         regions: 0,
+        script: None,
+        hd_out: None,
         swaps: Vec::new(),
         lan: None,
         ws_screen: None,
@@ -73,6 +77,8 @@ fn parse_args() -> Args {
             "--screen" => a.screen = Some(v()),
             "--floppy" => a.floppy = Some(v()),
             "--regions" => a.regions = parse_num(&v()) as usize,
+            "--script" => a.script = Some(v()),
+            "--hd-out" => a.hd_out = Some(v()),
             "--swap" => {
                 // --swap SECONDS:IMAGE  (insert a different floppy)
                 let s = v();
@@ -119,6 +125,10 @@ fn main() {
         m.board.attach_hard_disk(Some(Disk::hard_from_image(std::fs::read(p).expect("read hd"), 4, 17)));
     }
 
+    if let Some(script) = args.script.clone() {
+        run_script(m, &args, &script);
+        return;
+    }
     if let Some(ws_at) = args.lan {
         run_lan(m, &args, ws_at);
         return;
@@ -284,4 +294,193 @@ fn run_lan(fs: Machine, args: &Args, ws_at: f64) {
     if let (Some(p), Some(m)) = (&args.ws_screen, lan.nodes[1].as_ref()) {
         write_ppm(p, &m.board.render_rgba());
     }
+}
+
+/// Run a scripted session on a two-machine network. The fileserver (slot 0)
+/// is `fs` and is already configured by the command-line options. Each script
+/// line is `SECONDS ACTION ...`:
+///   ws power | fs power             toggle a machine's power
+///   ws type TEXT | fs type TEXT     type text (\r = Enter, \e = Esc)
+///   ws key HEX                      send one raw key code
+///   ws mouse DX DY                  move the trackball
+///   fs floppy PATH | fs eject       change the fileserver's diskette
+///   shot NAME                       save both screens as NAME_fs.ppm / NAME_ws.ppm
+///   save PATH                       write the fileserver's hard disk image
+fn run_script(fs: Machine, args: &Args, path: &str) {
+    use icon_core::lan::Lan;
+    // `DISKS/` in a script stands for $ICON_DISKS (the folder holding the
+    // YorkU disk image sets), so scripts can be shared.
+    let disks = std::env::var("ICON_DISKS").unwrap_or_else(|_| "DISKS".into());
+    let text = std::fs::read_to_string(path).expect("read script").replace("DISKS/", &format!("{disks}/"));
+    let mut steps: Vec<(f64, Vec<String>)> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| {
+            let mut it = l.splitn(2, ' ');
+            let t: f64 = it.next().unwrap().parse().expect("time");
+            let rest = it.next().unwrap_or("");
+            (t, rest.splitn(3, ' ').map(String::from).collect())
+        })
+        .collect();
+    steps.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let rom = std::fs::read(&args.rom).expect("read ROM");
+    let shot_dir = std::path::Path::new(path).parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
+    let mut lan = Lan::new(2);
+    let mut fs = Some(fs);
+    let new_ws = || {
+        Machine::new(Config {
+            rom: rom.clone(),
+            patch_800k_floppy: false,
+            ram_kb: 512,
+            nvram: presets::workstation(),
+            straps: STRAPS_NORMAL,
+            host_time: 0,
+            disk_controller: false,
+        })
+    };
+    let frame = CPU_HZ as u64 / 60;
+    let total = (args.seconds * CPU_HZ as f64) as u64;
+    let mut t = 0u64;
+    let mut idx = 0;
+    while t < total {
+        while idx < steps.len() && (steps[idx].0 * CPU_HZ as f64) as u64 <= t {
+            let (when, ref a) = steps[idx];
+            idx += 1;
+            let who = a[0].as_str();
+            let slot = if who == "ws" { 1 } else { 0 };
+            let verb = a.get(1).map(String::as_str).unwrap_or("");
+            let arg = a.get(2).cloned().unwrap_or_default();
+            println!("[{when:7.1}s] {}", a.join(" "));
+            match (who, verb) {
+                ("fs", "power") => match fs.take() {
+                    Some(m) => lan.power_on(0, m),
+                    None => {
+                        if let Some(m) = lan.power_off(0) {
+                            // Keep the disks: power back on with the same drives.
+                            let mut n = Machine::new(Config {
+                                rom: rom.clone(),
+                                patch_800k_floppy: false,
+                                ram_kb: args.ram_kb,
+                                nvram: m.board.nvram.words,
+                                straps: STRAPS_NORMAL,
+                                host_time: now_secs(),
+                                disk_controller: true,
+                            });
+                            n.board.wd.drives = m.board.wd.drives;
+                            fs = Some(n);
+                        }
+                    }
+                },
+                ("ws", "power") => {
+                    if lan.nodes[1].is_some() {
+                        lan.power_off(1);
+                    } else {
+                        let mut w = new_ws();
+            w.int5c_log = Some(Vec::new());
+            w.board.watch = Some((0x74A, 0x74B));
+            lan.power_on(1, w);
+                    }
+                }
+                (_, "type") => {
+                    let txt = arg.replace("\\r", "\r").replace("\\e", "\x1b");
+                    if let Some(m) = lan.nodes[slot].as_mut() {
+                        for k in icon_core::devices::keyboard::type_text(&txt) {
+                            m.board.key(k);
+                        }
+                    }
+                }
+                (_, "key") => {
+                    if let Some(m) = lan.nodes[slot].as_mut() {
+                        m.board.key(u8::from_str_radix(&arg, 16).expect("hex key"));
+                    }
+                }
+                (_, "mouse") => {
+                    let mut p = arg.split_whitespace().map(|x| x.parse::<i32>().unwrap());
+                    let (dx, dy) = (p.next().unwrap_or(0), p.next().unwrap_or(0));
+                    if let Some(m) = lan.nodes[slot].as_mut() {
+                        m.board.counters[1].motion(dx);
+                        m.board.counters[0].motion(dy);
+                    }
+                }
+                ("fs", "floppy") => {
+                    let d = Disk::floppy_from_image(std::fs::read(&arg).expect("read floppy")).expect("floppy size");
+                    if let Some(m) = lan.nodes[0].as_mut() { m.board.insert_floppy(Some(d)); }
+                    else if let Some(m) = fs.as_mut() { m.board.insert_floppy(Some(d)); }
+                }
+                ("fs", "eject") => {
+                    if let Some(m) = lan.nodes[0].as_mut() { m.board.insert_floppy(None); }
+                    else if let Some(m) = fs.as_mut() { m.board.insert_floppy(None); }
+                }
+                ("shot", _) => {
+                    let name = verb;
+                    for (i, tag) in [(0, "fs"), (1, "ws")] {
+                        if let Some(m) = lan.nodes[i].as_ref() {
+                            write_ppm(shot_dir.join(format!("{name}_{tag}.ppm")).to_str().unwrap(), &m.board.render_rgba());
+                        }
+                    }
+                }
+                ("save", _) => save_hd(&lan, fs.as_ref(), verb),
+                ("savefloppy", _) => {
+                    let m = lan.nodes[0].as_ref().or(fs.as_ref());
+                    if let Some(d) = m.and_then(|m| m.board.wd.drives[3].as_ref()) {
+                        std::fs::write(verb, &d.data).expect("write floppy");
+                        println!("floppy saved to {verb}");
+                    }
+                }
+                _ => println!("  ?? unknown action"),
+            }
+        }
+        lan.run(frame);
+        t += frame;
+    }
+    println!("LAN: {} packets", lan.packets);
+    for (i, m) in lan.nodes.iter().enumerate() {
+        if let Some(m) = m {
+            let r = m.cpu.regs();
+            println!("slot {i}: node {:02X} CS:IP={:04X}:{:04X}", m.board.arcnet.node_id, r.cs, r.ip);
+            let reads = m.board.nvram.log.iter().filter(|l| l.0 == 2).count();
+            let writes: Vec<_> = m.board.nvram.log.iter().filter(|l| l.0 != 2).collect();
+            if !m.board.watch_log.is_empty() {
+                let v: Vec<String> = m.board.watch_log.iter().zip(&m.board.watch_pcs).map(|((c, a, x), pc)| format!("{:.2}s {a:05X}={x:02X} @{pc:05X}", *c as f64 / CPU_HZ as f64)).collect();
+                println!("  watch writes: {}", v.join(", "));
+            }
+            if let Some(log) = &m.int5c_log {
+                let mut counts = std::collections::BTreeMap::new();
+                for (_, f, r) in log {
+                    if matches!(f, 0x13 | 0x1B | 0x2D | 0x3E | 0x48 | 0x4D) {
+                        *counts.entry((*f, *r)).or_insert(0u32) += 1;
+                    }
+                }
+                println!("  int5Ch (fn,result) counts: {:X?}", counts);
+                let line: Vec<String> = log.iter().filter(|(c, f, _)| *c > 170 * CPU_HZ as u64 && !matches!(f, 0x0E | 0x18 | 0x0A)).map(|(c, f, r)| format!("{:.1}:{f:X}={r:X}", *c as f64 / CPU_HZ as f64)).collect();
+                println!("  timeline: {}", line.join(" "));
+            }
+            println!("  NVRAM aborted reads: {}", m.board.nvram.aborted_reads);
+            println!("  NVRAM: {reads} reads, other commands: {:?}", &writes[..writes.len().min(20)]);
+            println!("  NVRAM words now: {:04X?}", m.board.nvram.words);
+            if let Some(e) = &m.boot_entry {
+                let pb = ((e.es as usize) << 4) + e.bx as usize;
+                let rd = |a: usize| m.board.ram.get(a).copied();
+                println!("  boot entry {:04X}:{:04X} ES:BX={:04X}:{:04X} DS={:04X} SS:SP={:04X}:{:04X}  param[0x38]={:02X?}",
+                    e.cs, e.ip, e.es, e.bx, e.ds, e.ss, e.sp, rd(pb + 0x38));
+                println!("  params at entry: {:02X?}", m.boot_params);
+            }
+        }
+    }
+    if let Some(p) = &args.hd_out {
+        save_hd(&lan, fs.as_ref(), p);
+    }
+}
+
+fn save_hd(lan: &icon_core::lan::Lan, off: Option<&Machine>, path: &str) {
+    let m = lan.nodes[0].as_ref().or(off);
+    if let Some(d) = m.and_then(|m| m.board.wd.drives[0].as_ref()) {
+        std::fs::write(path, &d.data).expect("write hd");
+        println!("hard disk saved to {path}");
+    }
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }

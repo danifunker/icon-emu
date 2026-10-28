@@ -76,6 +76,12 @@ pub struct Board {
     audio_cursor: u64,
     audio_dc: f32,
     audio_prev: f32,
+    /// Debug: log writes to this linear address range as (cycle, addr, value).
+    pub watch: Option<(u32, u32)>,
+    pub watch_log: Vec<(u64, u32, u8)>,
+    /// Address of the instruction being executed (set by `Machine::step`).
+    pub cur_pc: u32,
+    pub watch_pcs: Vec<u32>,
     /// When set, every I/O access is appended here: (cycle, port, value, is_write).
     pub io_log: Option<Vec<(u64, u16, u8, bool)>>,
     /// Unhandled I/O accesses seen, for discovering missing hardware.
@@ -85,6 +91,14 @@ pub struct Board {
 pub struct Machine {
     pub cpu: I80186,
     pub board: Board,
+    /// Registers at the first jump from the boot ROM into loaded code
+    /// (debugging aid: ES:BX is the boot parameter block).
+    pub boot_entry: Option<crate::cpu::Regs>,
+    /// Debug: the 0x40 bytes at ES:BX when `boot_entry` was captured.
+    pub boot_params: Vec<u8>,
+    /// Debug: when Some, log `int 5Ch` kernel calls as (cycle, fn, result).
+    pub int5c_log: Option<Vec<(u64, u16, u16)>>,
+    int5c_pending: Vec<(u16, u16, u16)>,
 }
 
 impl Machine {
@@ -119,6 +133,10 @@ impl Machine {
             fa88_edges: 0,
             cycles: 0,
             io_log: None,
+            watch: None,
+            watch_log: Vec::new(),
+            cur_pc: 0,
+            watch_pcs: Vec::new(),
             speaker: false,
             speaker_edges: Vec::new(),
             audio_cursor: 0,
@@ -128,12 +146,34 @@ impl Machine {
         };
         let mut cpu = I80186::new();
         cpu.reset();
-        Self { cpu, board }
+        Self { cpu, board, boot_entry: None, boot_params: Vec::new(), int5c_log: None, int5c_pending: Vec::new() }
     }
 
     /// Execute one instruction; returns cycles used.
     pub fn step(&mut self) -> u32 {
+        let from_rom = self.cpu.pc() >= 0xF8000;
+        self.board.cur_pc = self.cpu.pc();
+        if self.int5c_log.is_some() {
+            let r = self.cpu.regs();
+            if let Some(&(cs, ip, func)) = self.int5c_pending.last() {
+                if r.cs == cs && r.ip == ip {
+                    self.int5c_pending.pop();
+                    self.int5c_log.as_mut().unwrap().push((self.board.cycles, func, r.ax));
+                }
+            }
+            let pc = self.cpu.pc();
+            use crate::cpu::CpuBus;
+            if self.board.mem_read8(pc) == 0xCD && self.board.mem_read8(pc + 1) == 0x5C && self.int5c_pending.len() < 64 {
+                self.int5c_pending.push((r.cs, r.ip.wrapping_add(2), r.ax));
+            }
+        }
         let c = self.cpu.step(&mut self.board);
+        if from_rom && self.boot_entry.is_none() && self.cpu.pc() < 0xE0000 && self.board.cycles > 1_000_000 {
+            let r = self.cpu.regs();
+            let base = ((r.es as usize) << 4) + r.bx as usize;
+            self.boot_params = (0..0x40).map(|i| self.board.ram.get(base + i).copied().unwrap_or(0xFF)).collect();
+            self.boot_entry = Some(r);
+        }
         self.board.cycles += c as u64;
         self.board.arcnet.tick(self.board.cycles);
         self.board.wd.tick(c);
@@ -375,6 +415,12 @@ impl CpuBus for Board {
 
     fn mem_write8(&mut self, addr: u32, val: u8) {
         let addr = addr & 0xF_FFFF;
+        if let Some((lo, hi)) = self.watch {
+            if addr >= lo && addr <= hi && self.watch_log.len() < 10_000 {
+                self.watch_log.push((self.cycles, addr, val));
+                self.watch_pcs.push(self.cur_pc);
+            }
+        }
         match addr {
             a if (a as usize) < self.ram.len() => self.ram[a as usize] = val,
             0xD8000..=0xD8FFF if addr & 1 == 0 => {

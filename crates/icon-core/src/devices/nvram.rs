@@ -30,6 +30,10 @@ pub struct Nvram {
     state: State,
     /// Set whenever the contents change, so a front end can persist them.
     pub dirty: bool,
+    /// Debug: every completed command (opcode, address, data).
+    pub log: Vec<(u8, u8, u16)>,
+    /// Debug: reads aborted by CS dropping before all 16 bits were clocked.
+    pub aborted_reads: u32,
 }
 
 impl Nvram {
@@ -42,6 +46,8 @@ impl Nvram {
             do_bit: true,
             state: State::Idle,
             dirty: false,
+            log: Vec::new(),
+            aborted_reads: 0,
         }
     }
 
@@ -54,6 +60,11 @@ impl Nvram {
     pub fn set_pins(&mut self, cs: bool, sk: bool, di: bool) {
         if !cs {
             if self.cs {
+                if let State::Reading { remaining, .. } = self.state {
+                    if remaining > 1 {
+                        self.aborted_reads += 1;
+                    }
+                }
                 self.state = State::Idle;
                 self.do_bit = true;
             }
@@ -115,6 +126,9 @@ impl Nvram {
     fn execute(&mut self, bits: u8) -> State {
         let op = bits >> 6;
         let addr = bits & 0x0F;
+        if self.log.len() < 100_000 {
+            self.log.push((op, addr, self.words[addr as usize]));
+        }
         match op {
             0b10 => {
                 // READ: a dummy 0 is presented first, then D15..D0.
