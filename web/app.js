@@ -188,6 +188,21 @@ $("hd-new").addEventListener("click", () => {
   idbPut("fileserver-hd", hardDisk);
   showHd(net && net.is_on(FS) ? "attached at next power-on" : "");
 });
+// A factory-formatted 64 MB drive: blocks written by hdformat/fdisk/dinit on
+// the emulated LEXICON, stored sparsely ("ICONHD64", size, then u32 block +
+// 512 bytes per non-zero block). Built by scripts/prep-64mb.txt.
+$("hd-new64").addEventListener("click", async () => {
+  if (hardDisk && !confirm("Replace the current hard disk with a blank 64 MB disk?")) return;
+  const res = await fetch("rom/hd64-factory.bin");
+  if (!res.ok) { alert("hd64-factory.bin is missing: run scripts/prep-64mb.txt (see docs/INSTALL.md)"); return; }
+  const t = new Uint8Array(await res.arrayBuffer());
+  const v = new DataView(t.buffer);
+  const data = new Uint8Array(v.getUint32(8, true));
+  for (let o = 12; o + 516 <= t.length; o += 516) data.set(t.subarray(o + 4, o + 516), v.getUint32(o, true) * 512);
+  hardDisk = { name: "lexicon-64mb.img", data };
+  idbPut("fileserver-hd", hardDisk);
+  showHd(net && net.is_on(FS) ? "attached at next power-on" : "");
+});
 $("hd-load").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;

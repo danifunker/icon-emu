@@ -13,7 +13,15 @@ pub const WORKSTATION: usize = 1;
 /// A blank 10 MB (306 x 4 x 17) hard disk image.
 #[wasm_bindgen]
 pub fn blank_hard_disk_10mb() -> Vec<u8> {
-    Disk::blank_hard(306, 4, 17).data
+    let (c, h, s) = icon_core::devices::wd1002::HD_10MB;
+    Disk::blank_hard(c, h, s).data
+}
+
+/// A blank 64 MB-class (1024 x 8 x 17, Micropolis 1335) hard disk image.
+#[wasm_bindgen]
+pub fn blank_hard_disk_64mb() -> Vec<u8> {
+    let (c, h, s) = icon_core::devices::wd1002::HD_64MB;
+    Disk::blank_hard(c, h, s).data
 }
 
 #[wasm_bindgen]
@@ -144,13 +152,8 @@ impl Network {
     /// Attach the fileserver's hard disk. Geometry comes from a geometry
     /// record in block 1 when present, otherwise 4 heads x 17 sectors.
     pub fn attach_hard_disk(&mut self, data: &[u8]) {
-        let (heads, spt) = if data.len() >= 512 && data[0x10] == 2 && data[0x2F] == 3 {
-            (data[0x13].max(1), u16::from_le_bytes([data[0x1C], data[0x1D]]).max(1) as u8)
-        } else {
-            (4, 17)
-        };
         if let Some(m) = self.m_mut(FILESERVER) {
-            m.board.attach_hard_disk(Some(Disk::hard_from_image(data.to_vec(), heads, spt)));
+            m.board.attach_hard_disk(Some(Disk::hard_auto(data.to_vec())));
         }
     }
 

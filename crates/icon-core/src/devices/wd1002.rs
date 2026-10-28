@@ -7,6 +7,10 @@
 //! FAA4 sector count, FAA6 sector number, FAA8 cylinder low, FAAA cylinder
 //! high, FAAC SDH, FAAE status / command. INTRQ is PPI A port A bit 5.
 
+/// Drive geometries (cylinders, heads, sectors per track).
+pub const HD_10MB: (u16, u8, u8) = (306, 4, 17);
+pub const HD_64MB: (u16, u8, u8) = (1024, 8, 17);
+
 pub const ST_BSY: u8 = 0x80;
 pub const ST_RDY: u8 = 0x40;
 pub const ST_SC: u8 = 0x10;
@@ -35,6 +39,20 @@ impl Disk {
     pub fn blank_hard(cylinders: u16, heads: u8, sectors: u8) -> Self {
         let size = cylinders as usize * heads as usize * sectors as usize * 512;
         Self { data: vec![0; size], cylinders, heads, sectors, first_sector: 0, write_protected: false, dirty: true }
+    }
+
+    /// A hard-disk image whose geometry is taken from its block-1 geometry
+    /// record when present, otherwise from its size: 10 MB = 306x4x17,
+    /// 64 MB (Micropolis 1335 class) = 1024x8x17.
+    pub fn hard_auto(data: Vec<u8>) -> Self {
+        let (heads, spt) = if data.len() >= 512 && data[0x10] == 2 && data[0x2F] == 3 {
+            (data[0x13].max(1), u16::from_le_bytes([data[0x1C], data[0x1D]]).max(1) as u8)
+        } else if data.len() == HD_64MB.0 as usize * HD_64MB.1 as usize * HD_64MB.2 as usize * 512 {
+            (HD_64MB.1, HD_64MB.2)
+        } else {
+            (4, 17)
+        };
+        Self::hard_from_image(data, heads, spt)
     }
 
     pub fn hard_from_image(data: Vec<u8>, heads: u8, sectors: u8) -> Self {
@@ -93,10 +111,16 @@ pub struct Wd1002 {
     buffer: Box<[u8; 512]>,
     ptr: usize,
     xfer: Xfer,
+    /// Read/write with the M (multiple sector) bit: continue while the
+    /// sector count is non-zero. Without it the WD1010 moves one sector.
+    multi: bool,
     /// Cycles left before a busy command completes.
     busy_for: u32,
     /// Drive activity, for front-panel LEDs: 0-2 hard disk, 3 floppy.
     pub activity: [u32; 4],
+    /// Debug: commands issued, by high nibble; and the last few (cmd, cyl, sdh, sector, count).
+    pub cmd_counts: [u32; 16],
+    pub last_cmds: std::collections::VecDeque<(u8, u16, u8, u8, u8)>,
 }
 
 impl Default for Wd1002 {
@@ -113,8 +137,11 @@ impl Default for Wd1002 {
             buffer: Box::new([0; 512]),
             ptr: 0,
             xfer: Xfer::None,
+            multi: false,
             busy_for: 0,
             activity: [0; 4],
+            cmd_counts: [0; 16],
+            last_cmds: Default::default(),
         }
     }
 }
@@ -170,6 +197,11 @@ impl Wd1002 {
     }
 
     fn command(&mut self, v: u8) {
+        self.cmd_counts[(v >> 4) as usize] += 1;
+        if self.last_cmds.len() == 12 {
+            self.last_cmds.pop_front();
+        }
+        self.last_cmds.push_back((v, self.cyl, self.sdh, self.sector, self.count));
         self.error = 0;
         self.irq = false;
         self.status = ST_BSY | ST_RDY | ST_SC;
@@ -180,6 +212,7 @@ impl Wd1002 {
             0x5 => Xfer::Format,
             _ => Xfer::None,
         };
+        self.multi = v & 0x04 != 0;
         if v >> 4 == 1 {
             self.cyl = 0; // restore
         }
@@ -291,10 +324,10 @@ impl Wd1002 {
         }
     }
 
-    /// Multi-sector transfers continue while the sector count is non-zero.
+    /// Multi-sector transfers (M bit) continue while the sector count is non-zero.
     fn next_sector_or_done(&mut self) {
         self.count = self.count.wrapping_sub(1);
-        if self.count != 0 {
+        if self.multi && self.count != 0 {
             self.sector = self.sector.wrapping_add(1);
             if self.xfer == Xfer::Read && !self.load_sector() {
                 return self.fail(ER_ID_NOT_FOUND);

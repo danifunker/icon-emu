@@ -66,3 +66,32 @@ Packages other than the System Software (Help, QDOS, languages …) go in with `
 5. Eject the floppy. **Download .img** to keep the disk.
 
 Headless: `scripts/install-help.txt` (start from the installed disk with `--hd`, no `--floppy`). Result kept as `disks/lexicon-4.10.01-10mb-help.img`: 130 pages in `/help/qnx` plus `/util/help`.
+
+## 64 MB hard disks
+
+A 64 MB LEXICON drive (here a Micropolis 1335 class: **1,024 cylinders × 8 heads × 17 sectors = 139,264 blocks**) was not prepared by `configure`. Its `init_hd1` only runs `hdformat`/`fdisk` on old-format disks; on a **new-format** disk it skips them and just checks/initialises the existing partitions. So a 64 MB drive needs a "factory" preparation first, done with the real tools from the Configuration diskette:
+
+```
+hdformat 1 c=1024 h=8 -p l=/sys/HDos_ldr     # geometry record, BBT (69 spares), 14-block loader at block 4
+mount disk 2 /drivers/hd p=1 ; bbt 1 +u <$null ; mount disk 2 d=2 p=1
+fdisk 1 +p                                     # partitions: 07 = 65,535 blocks (boot), 08 = 65,535, 09 = 8,106
+dinit 2 +h -p ; mount disk 3 d=2 p=2 ; dinit 3 +h -p ; mount disk 4 d=2 p=3 ; dinit 4 +h -p
+```
+
+The partitions need empty filesystems (`dinit`): otherwise the floppy-booted fileserver mounts partition 1 as drive 2, searches it, and fails to load its start-up programs ("Bad load file").
+
+In the browser, **New 64 MB** gives you exactly this factory-prepared disk (the 22 blocks those commands write, captured in `disks/hd64-factory.bin` and copied to `web/rom/` by `make web`). Headless: `scripts/prep-64mb.txt` makes it from a blank 71,303,168-byte image.
+
+Installing then differs from the 10 MB flow:
+1. Same start: 4.01 boot diskette, wait until the fileserver is **fully** up (it takes longer with a hard disk mounted; swapping floppies earlier gives "Bad load file"), then the Netcard 4.10.01 disk, then power on the workstation, log in, Configuration diskette, `configure`, OK, OK, **Perform**.
+2. There is no "initialize" warning: `configure` asks for System SW disk 1 → insert, OK → "Please re-insert the Configuration diskette" → insert, OK.
+3. The main screen now offers *initialize the first / second hard drive partition? yes / no*. "no" is fine (they already hold empty filesystems). **Perform**.
+4. System SW disks 1–5 as before → complete → OK → eject → power-cycle the fileserver. It boots 4.10.01 from the 64 MB disk; the ROM's 4-head assumption doesn't matter because the loader sits in cylinder 0.
+
+Headless: `scripts/install-4.10.01-64mb.txt` with the prepared disk as `--hd`. Result kept as `disks/lexicon-4.10.01-64mb.img`.
+
+The ICON's `fdisk` writes a PC-style table with QNX 2 partition types **07, 08, 09** (one per partition), and the start fields are **1-based** block numbers.
+
+## The graphical environment (House)
+
+The doors-and-notebooks environment is **House** (`/util/house`, which runs `/sys/ui`; the book's `ui`). After logging in, type `house`; CTRL-d from its QNX shell returns. A user can be given House as their login program through the password file's entry-command field (`new_user`). The separate **ICON_LOOK** GUI package (a `/icon_look` directory that `sys.init` and `env_mgr` look for) is not in the YorkU disk set.

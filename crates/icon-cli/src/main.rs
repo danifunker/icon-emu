@@ -122,7 +122,7 @@ fn main() {
         m.board.insert_floppy(Some(d));
     }
     if let Some(p) = &args.hd {
-        m.board.attach_hard_disk(Some(Disk::hard_from_image(std::fs::read(p).expect("read hd"), 4, 17)));
+        m.board.attach_hard_disk(Some(Disk::hard_auto(std::fs::read(p).expect("read hd"))));
     }
 
     if let Some(script) = args.script.clone() {
@@ -439,6 +439,10 @@ fn run_script(fs: Machine, args: &Args, path: &str) {
         if let Some(m) = m {
             let r = m.cpu.regs();
             println!("slot {i}: node {:02X} CS:IP={:04X}:{:04X}", m.board.arcnet.node_id, r.cs, r.ip);
+            if m.board.has_wd {
+                println!("  WD1002 cmds by nibble: {:?}", m.board.wd.cmd_counts);
+                println!("  last: {:02X?}  status {:02X} err {:02X}", m.board.wd.last_cmds, m.board.wd.status, m.board.wd.error);
+            }
             let reads = m.board.nvram.log.iter().filter(|l| l.0 == 2).count();
             let writes: Vec<_> = m.board.nvram.log.iter().filter(|l| l.0 != 2).collect();
             if !m.board.watch_log.is_empty() {

@@ -1,0 +1,17 @@
+0 fs power
+35 fs type root\r
+39 fs type superuser\r
+45 fs floppy DISKS/System 4.10.01/ICON_SERIES_CONFIGURATION_DISKETTE_4.10.01_EXCEPTION_REL._SEP_17_1991_DISK_1_OF_1.img
+50 fs type /util/hdformat 1 c=1024 h=8 -p l=/sys/HDos_ldr\r
+300 fs type mount disk 2 /drivers/hd p=1\r
+305 fs type /util/bbt 1 +u <$null\r
+310 fs type mount disk 2 d=2 p=1\r
+315 fs type /util/fdisk 1 +p\r
+330 fs type mount disk 2 d=2 p=1\r
+335 fs type dinit 2 +h -p\r
+360 fs type mount disk 3 d=2 p=2\r
+365 fs type dinit 3 +h -p\r
+390 fs type mount disk 4 d=2 p=3\r
+395 fs type dinit 4 +h -p\r
+420 fs type /util/fdisk 1\r
+431 save hd64-prepped.img

@@ -8,6 +8,7 @@ web:
 	$(CARGO) build --release -p icon-web --target wasm32-unknown-unknown
 	$(HOME)/.cargo/bin/wasm-bindgen --target web --no-typescript --out-dir web/pkg $(WASM)
 	mkdir -p web/rom && cp $(ROM) web/rom/icon1_rom_combined.bin
+	if [ -f disks/hd64-factory.bin ]; then cp disks/hd64-factory.bin web/rom/; fi
 
 serve: web
 	cd web && python3 -m http.server 8086
