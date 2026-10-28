@@ -32,6 +32,9 @@ pub struct Config {
     pub straps: u8,
     /// Host wall-clock time (Unix seconds) at power-on, for the RTC.
     pub host_time: i64,
+    /// A WD1002-05 disk controller is fitted (fileservers). Workstations
+    /// have none, so its ports read FFh.
+    pub disk_controller: bool,
 }
 
 pub struct Board {
@@ -47,6 +50,7 @@ pub struct Board {
     pub crtc: Crtc,
     pub sio: Sio8274,
     pub wd: Wd1002,
+    pub has_wd: bool,
     pub rtc: Msm5832,
     /// FA80-FA8E addressable latch outputs (bit 0 of each write).
     latch_fa8x: [bool; 8],
@@ -100,6 +104,7 @@ impl Machine {
             crtc: Crtc::default(),
             sio: Sio8274::default(),
             wd: Wd1002::default(),
+            has_wd: cfg.disk_controller,
             rtc: Msm5832::new(cfg.host_time),
             latch_fa8x: [false; 8],
             arcnet: Com9026::default(),
@@ -400,7 +405,7 @@ impl Board {
         match port {
             0xF803 => self.crtc.read_data(),
             0xF920 => self.kbd_latch,
-            0xFAA0..=0xFAAE if port & 1 == 0 => self.wd.read(((port - 0xFAA0) >> 1) as u8),
+            0xFAA0..=0xFAAE if port & 1 == 0 && self.has_wd => self.wd.read(((port - 0xFAA0) >> 1) as u8),
             // RTC data, valid while READ (FA82 = 0) is asserted.
             0xFA80 => {
                 let reg = self.ppi_b.latch[1] & 0x0F;
@@ -433,7 +438,7 @@ impl Board {
             0xF880 => self.arcnet.write_mask(val),
             0xF882 => self.arcnet.command(val),
             0xF920 => self.kbd_pending = false,
-            0xFAA0..=0xFAAE if port & 1 == 0 => self.wd.write(((port - 0xFAA0) >> 1) as u8, val),
+            0xFAA0..=0xFAAE if port & 1 == 0 && self.has_wd => self.wd.write(((port - 0xFAA0) >> 1) as u8, val),
             0xFAE1 => self.sio.ch[0].write_data(val),
             0xFAE3 => self.sio.ch[1].write_data(val),
             0xFAE5 => self.sio.ch[0].write_control(val),

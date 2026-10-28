@@ -3,3 +3,4 @@
 pub mod cpu;
 pub mod devices;
 pub mod machine;
+pub mod lan;

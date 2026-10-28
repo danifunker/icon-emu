@@ -19,6 +19,8 @@ struct Args {
     screen: Option<String>,
     floppy: Option<String>,
     regions: usize,
+    lan: Option<f64>,
+    ws_screen: Option<String>,
     type_text: Vec<(f64, String)>,
     trace_from: Option<u32>,
     trace_count: usize,
@@ -48,6 +50,8 @@ fn parse_args() -> Args {
         screen: None,
         floppy: None,
         regions: 0,
+        lan: None,
+        ws_screen: None,
         type_text: Vec::new(),
         trace_from: None,
         trace_count: 2000,
@@ -67,6 +71,8 @@ fn parse_args() -> Args {
             "--screen" => a.screen = Some(v()),
             "--floppy" => a.floppy = Some(v()),
             "--regions" => a.regions = parse_num(&v()) as usize,
+            "--lan" => a.lan = Some(v().parse().unwrap()),
+            "--ws-screen" => a.ws_screen = Some(v()),
             "--type" => {
                 // --type SECONDS:TEXT  (\r for Enter)
                 let s = v();
@@ -96,7 +102,7 @@ fn main() {
     };
     let fs = args.preset == "fs";
     let _ = fs;
-    let mut m = Machine::new(Config { rom, patch_800k_floppy: false, ram_kb: args.ram_kb, nvram, straps: args.straps, host_time: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) });
+    let mut m = Machine::new(Config { rom, patch_800k_floppy: false, ram_kb: args.ram_kb, nvram, straps: args.straps, host_time: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0), disk_controller: fs });
     if let Some(p) = &args.floppy {
         let d = Disk::floppy_from_image(std::fs::read(p).expect("read floppy")).expect("unknown floppy size");
         m.board.insert_floppy(Some(d));
@@ -105,6 +111,10 @@ fn main() {
         m.board.attach_hard_disk(Some(Disk::hard_from_image(std::fs::read(p).expect("read hd"), 4, 17)));
     }
 
+    if let Some(ws_at) = args.lan {
+        run_lan(m, &args, ws_at);
+        return;
+    }
     let total = (args.seconds * CPU_HZ as f64) as u64;
     let mut ring: Vec<u32> = Vec::with_capacity(args.trace_last);
     let mut hot: HashMap<u32, u64> = HashMap::new();
@@ -209,5 +219,56 @@ fn main() {
             f.write_all(&px[..3]).unwrap();
         }
         println!("screen written to {p} (frame base {:05X})", m.board.frame_base());
+    }
+}
+
+fn write_ppm(path: &str, rgba: &[u8]) {
+    let mut f = std::fs::File::create(path).unwrap();
+    write!(f, "P6\n640 240\n255\n").unwrap();
+    for px in rgba.chunks(4) {
+        f.write_all(&px[..3]).unwrap();
+    }
+}
+
+/// Fileserver (slot 0) plus a workstation (slot 1) powered on `ws_at`
+/// seconds later, on one ICONET segment.
+fn run_lan(fs: Machine, args: &Args, ws_at: f64) {
+    use icon_core::lan::Lan;
+    let rom = std::fs::read(&args.rom).expect("read ROM");
+    let mut lan = Lan::new(2);
+    lan.power_on(0, fs);
+    let total = (args.seconds * CPU_HZ as f64) as u64;
+    let ws_at = (ws_at * CPU_HZ as f64) as u64;
+    let mut ws_on = false;
+    let mut t = 0u64;
+    while t < total {
+        if !ws_on && t >= ws_at {
+            let ws = Machine::new(Config {
+                rom: rom.clone(),
+                patch_800k_floppy: false,
+                ram_kb: 512,
+                nvram: presets::workstation(),
+                straps: STRAPS_NORMAL,
+                host_time: 0,
+                disk_controller: false,
+            });
+            lan.power_on(1, ws);
+            ws_on = true;
+        }
+        lan.run(CPU_HZ as u64 / 60);
+        t += CPU_HZ as u64 / 60;
+    }
+    println!("LAN: {} packets delivered", lan.packets);
+    for (i, m) in lan.nodes.iter().enumerate() {
+        if let Some(m) = m {
+            let r = m.cpu.regs();
+            println!("node slot {i}: id {:02X} CS:IP={:04X}:{:04X}", m.board.arcnet.node_id, r.cs, r.ip);
+        }
+    }
+    if let (Some(p), Some(m)) = (&args.screen, lan.nodes[0].as_ref()) {
+        write_ppm(p, &m.board.render_rgba());
+    }
+    if let (Some(p), Some(m)) = (&args.ws_screen, lan.nodes[1].as_ref()) {
+        write_ppm(p, &m.board.render_rgba());
     }
 }

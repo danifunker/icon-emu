@@ -23,7 +23,7 @@ impl Emu {
             _ => presets::workstation(),
         };
         Ok(Emu {
-            m: Machine::new(Config { rom: rom.to_vec(), patch_800k_floppy: false, ram_kb: 512, nvram, straps: STRAPS_NORMAL, host_time: host_time as i64 }),
+            m: Machine::new(Config { rom: rom.to_vec(), patch_800k_floppy: false, ram_kb: 512, nvram, straps: STRAPS_NORMAL, host_time: host_time as i64, disk_controller: preset == "fs" }),
         })
     }
 

@@ -31,6 +31,11 @@ pub struct Com9026 {
     /// unacknowledged, i.e. TA set and TMA clear, as with an absent target).
     tx_done_at: Option<u64>,
     now: u64,
+    /// On a network the `Lan` delivers packets and completes transmits; a
+    /// standalone chip completes them unacknowledged by itself.
+    pub networked: bool,
+    /// Set when the chip comes out of reset (the `Lan` broadcasts RECON).
+    pub joined: bool,
 }
 
 impl Default for Com9026 {
@@ -46,6 +51,8 @@ impl Default for Com9026 {
             recon_at: None,
             tx_done_at: None,
             now: 0,
+            networked: false,
+            joined: false,
         }
     }
 }
@@ -67,6 +74,7 @@ impl Com9026 {
             self.rx_page = None;
             self.tx_page = None;
             self.recon_at = Some(now + RECON_DELAY_CYCLES);
+            self.joined = true;
         }
     }
 
@@ -110,8 +118,10 @@ impl Com9026 {
                 // Enable transmit from page nn.
                 self.tx_page = Some((v >> 3) & 3);
                 self.status &= !(ST_TA | ST_TMA);
-                // Free-buffer enquiry with no reply, then give up: ~1 ms.
-                self.tx_done_at = Some(self.now + 7_000);
+                // Standalone: free-buffer enquiry with no reply, then give up (~1 ms).
+                if !self.networked {
+                    self.tx_done_at = Some(self.now + 7_000);
+                }
             }
             0x04 => {
                 self.rx_page = Some(((v >> 3) & 3, v & 0x80 != 0));
@@ -128,6 +138,40 @@ impl Com9026 {
             }
             _ => {}
         }
+    }
+
+    /// The packet waiting to go out: (destination, page bytes with SID filled in).
+    pub fn pending_tx(&self) -> Option<(u8, [u8; 512])> {
+        let page = self.tx_page? as usize;
+        let mut buf = [0u8; 512];
+        buf.copy_from_slice(&self.ram[page * 512..page * 512 + 512]);
+        buf[0] = self.node_id;
+        Some((buf[1], buf))
+    }
+
+    /// Finish the pending transmit. `acked` sets TMA (never for broadcasts).
+    pub fn complete_tx(&mut self, acked: bool) {
+        self.tx_page = None;
+        self.status |= ST_TA | if acked { ST_TMA } else { 0 };
+    }
+
+    /// Can this node take a packet right now (receiver enabled, broadcast flag)?
+    pub fn rx_ready(&self, broadcast: bool) -> bool {
+        matches!(self.rx_page, Some((_, b)) if !broadcast || b)
+    }
+
+    /// Store a received packet and inhibit the receiver (one packet per enable).
+    pub fn deliver(&mut self, packet: &[u8; 512]) {
+        if let Some((page, _)) = self.rx_page.take() {
+            let p = page as usize * 512;
+            self.ram[p..p + 512].copy_from_slice(packet);
+            self.status |= ST_RI;
+        }
+    }
+
+    /// Another node joined the network: reconfiguration after a short burst.
+    pub fn network_reconfigured(&mut self) {
+        self.recon_at = Some(self.now + RECON_DELAY_CYCLES);
     }
 
     /// INTR output, seen by the ICON on PPI A port C bit 5.
