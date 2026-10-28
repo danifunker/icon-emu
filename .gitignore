@@ -1,0 +1,8 @@
+target/
+*.png
+/roms/
+/disks/
+/testdata/
+web/pkg/
+web/rom/
+testdata/

@@ -1,0 +1,8 @@
+[package]
+name = "icon-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Emulator core for the Unisys/CEMCORP ICON and LEXICON (80186)"
+
+[dependencies]
