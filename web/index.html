@@ -3,56 +3,136 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LEXICON Emulator</title>
+<title>ICON Network</title>
 <style>
-  :root { --bg: #1b1d21; --panel: #2a2d33; --text: #e8e6e1; --muted: #9a978f; --amber: #f2a33a; --led: #ffd23f; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
-  main { max-width: 1340px; margin: 24px auto; padding: 0 16px; }
-  h1 { font-size: 18px; font-weight: 600; margin: 0 0 16px; }
-  .machine { background: var(--panel); border-radius: 10px; padding: 16px; display: inline-block; }
-  .bezel { background: #111; padding: 18px; border-radius: 18px; box-shadow: inset 0 0 12px #000; }
-  canvas { display: block; width: 960px; height: 720px; max-width: 100%; height: auto; aspect-ratio: 4 / 3;
-           image-rendering: pixelated; background: #000; border-radius: 6px; }
-  .controls { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
-  button { background: #3a3e46; color: var(--text); border: 1px solid #555; border-radius: 6px; padding: 6px 14px; cursor: pointer; }
-  button.power.on { background: var(--amber); color: #222; border-color: var(--amber); }
-  .led { width: 12px; height: 12px; border-radius: 50%; background: #4a4220; display: inline-block; }
-  .led.on { background: var(--led); box-shadow: 0 0 8px var(--led); }
-  .file .btn { background: #3a3e46; border: 1px solid #555; border-radius: 6px; padding: 6px 14px; cursor: pointer; display: inline-block; }
-  .muted { color: var(--muted); }
-  .led.red.on { background: #ff4a3a; box-shadow: 0 0 8px #ff4a3a; }
-  .led.green.on { background: #5fe05f; box-shadow: 0 0 8px #5fe05f; }
-  .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
-  #status { font-family: ui-monospace, monospace; color: var(--muted); }
+  :root {
+    --bg: #1c1d20; --text: #e9e6df; --muted: #9c988f;
+    --beige: #d9d2c0; --beige-dark: #b9b19c; --beige-edge: #a39b86;
+    --amber: #f2a33a; --yellow: #ffd23f; --red: #ff4a3a; --green: #5fe05f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+  main { max-width: 1500px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+  h1 { font-size: 19px; font-weight: 650; margin: 0; letter-spacing: .02em; }
+  .sub { color: var(--muted); }
+  .net { display: grid; grid-template-columns: minmax(0, 1fr) 70px minmax(0, 1fr); align-items: start; }
+  @media (max-width: 1100px) { .net { grid-template-columns: 1fr; } .coax { display: none !important; } }
+
+  .machine { background: linear-gradient(#e2dbca, var(--beige)); color: #2b2a26; border-radius: 14px;
+             padding: 16px; border: 1px solid var(--beige-edge); box-shadow: 0 10px 30px #0006;
+             outline: 3px solid transparent; outline-offset: 3px; cursor: pointer; }
+  .machine.focus { outline-color: var(--amber); }
+  .machine h2 { font-size: 15px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: baseline; }
+  .machine h2 small { font-weight: 400; color: #6c675c; }
+  .crt { background: #2a2925; padding: 16px; border-radius: 20px; box-shadow: inset 0 0 0 6px #3a3934, inset 0 0 20px #000; }
+  canvas { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; image-rendering: pixelated;
+           background: #050505; border-radius: 10px; box-shadow: 0 0 18px #0009 inset; }
+  .console { max-width: 520px; margin: 0 auto 14px; }
+  .console.collapsed canvas { display: none; }
+
+  .chassis { background: linear-gradient(var(--beige-dark), #a9a18b); border-radius: 8px; padding: 12px 14px;
+             display: flex; align-items: center; gap: 14px; flex-wrap: wrap; border: 1px solid var(--beige-edge); }
+  .slot { width: 210px; height: 34px; background: #26251f; border-radius: 4px; position: relative; box-shadow: inset 0 2px 6px #000; }
+  .slot::after { content: ""; position: absolute; left: 12px; right: 12px; top: 15px; height: 4px; background: #000; border-radius: 2px; }
+  .slot .latch { position: absolute; right: -6px; top: 6px; width: 26px; height: 22px; background: #5c584e; border-radius: 3px; transition: transform .2s; }
+  .slot.loaded .latch { transform: rotate(90deg); }
+  .lamps { display: flex; gap: 14px; align-items: center; font-size: 11px; color: #3d3a33; }
+  .lamp { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; }
+  .led { width: 11px; height: 11px; border-radius: 50%; background: #4d4636; box-shadow: inset 0 1px 2px #0008; }
+  .led.on.yellow { background: var(--yellow); box-shadow: 0 0 9px var(--yellow); }
+  .led.on.red { background: var(--red); box-shadow: 0 0 9px var(--red); }
+  .led.on.green { background: var(--green); box-shadow: 0 0 9px var(--green); }
+  .led.on.amber { background: var(--amber); box-shadow: 0 0 9px var(--amber); }
+
+  .pedestal { margin: 12px auto 0; width: 62%; background: linear-gradient(var(--beige-dark), #a39b85);
+              border-radius: 6px 6px 12px 12px; padding: 10px 14px; display: flex; align-items: center; gap: 14px;
+              border: 1px solid var(--beige-edge); }
+  .kbd { margin-top: 12px; height: 26px; background: linear-gradient(#cfc8b5, #bdb5a0); border-radius: 6px;
+         border: 1px solid var(--beige-edge); display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; }
+  .ball { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #8a8a8a, #2d2d2d); }
+
+  button.power { background: #3b3a35; color: #eee; border: 0; border-radius: 6px; padding: 7px 14px; font-weight: 600; cursor: pointer; }
+  button.power.on { background: var(--amber); color: #2b2210; }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; font-size: 13px; }
+  .controls button, .controls .btn { background: #f3eee2; color: #2b2a26; border: 1px solid #9d957f; border-radius: 6px;
+                                     padding: 5px 11px; cursor: pointer; font: inherit; }
+  .controls .label { font-weight: 600; margin-right: 4px; }
+  .muted { color: #6c675c; }
+  .status { font: 12px ui-monospace, monospace; color: #5f5a50; margin-left: auto; }
+
+  .coax { display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 160px; gap: 8px; color: var(--muted); font-size: 11px; text-align: center; }
+  .cable { width: 100%; height: 8px; background: #111; border-radius: 4px; position: relative; overflow: hidden; }
+  .cable.busy::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--green), transparent); animation: flow .5s linear infinite; }
+  @keyframes flow { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .help { color: var(--muted); font-size: 13px; margin-top: 18px; max-width: 1100px; }
+  code { background: #0004; padding: 1px 5px; border-radius: 4px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>LEXICON fileserver console (5053 ISS 2 boot ROM)</h1>
-  <div class="machine">
-    <div class="bezel"><canvas id="screen" width="640" height="240"></canvas></div>
-    <div class="controls">
-      <button id="power" class="power">Power</button>
-      <label class="file"><input id="floppy" type="file" accept=".img" hidden><span class="btn">Load floppy…</span></label>
-      <span id="floppy-name" class="muted">no diskette</span>
-      <span>trouble <span id="led" class="led"></span></span>
-      <span>disk <span id="hd-led" class="led red"></span></span>
-      <span>floppy <span id="fd-led" class="led green"></span></span>
-      <label><input id="sound" type="checkbox" checked> sound</label>
-      <span id="status">off</span>
-    </div>
-    <div class="controls">
-      <strong>Hard disk</strong>
-      <button id="hd-new">New 10 MB disk</button>
-      <label class="file"><input id="hd-load" type="file" accept=".img" hidden><span class="btn">Load .img…</span></label>
-      <button id="hd-download">Download .img</button>
-      <span id="hd-name" class="muted">no hard disk</span>
-    </div>
-    <p class="hint">Type straight into the page. F11 / F12 = ACTION keys, Insert = HELP, Delete = RUBOUT,
-      Scroll Lock = CURSOR LOCK, Home = CLR. Arrow keys send the keypad cursor keys.
-      Log in as <code>root</code> / <code>superuser</code>. The hard disk autosaves in this browser; changes
-      to it take effect at the next power-on.</p>
+  <header>
+    <h1>ICON Network</h1>
+    <span class="sub">LEXICON fileserver and ICON workstation on one ICONET segment. Real 5053 ISS 2 boot ROM, emulated.</span>
+    <label class="sub" style="margin-left:auto"><input id="sound" type="checkbox" checked> sound</label>
+  </header>
+
+  <div class="net">
+    <!-- LEXICON fileserver -->
+    <section class="machine" id="m0" data-slot="0">
+      <h2>LEXICON fileserver <small id="status0" class="status">off</small></h2>
+      <div class="console" id="console0">
+        <div class="crt"><canvas id="screen0" width="640" height="240"></canvas></div>
+      </div>
+      <div class="chassis">
+        <div class="slot" id="slot0"><div class="latch"></div></div>
+        <div class="lamps">
+          <span class="lamp"><span class="led amber" id="pwr0"></span>power</span>
+          <span class="lamp"><span class="led red" id="hd0"></span>disk</span>
+          <span class="lamp"><span class="led green" id="fd0"></span>floppy</span>
+          <span class="lamp"><span class="led yellow" id="trouble0"></span>trouble</span>
+        </div>
+        <button class="power" id="power0">Power</button>
+      </div>
+      <div class="controls">
+        <span class="label">Floppy</span>
+        <label><input id="floppy" type="file" accept=".img" hidden><span class="btn">Insert…</span></label>
+        <button id="eject">Eject</button>
+        <span id="floppy-name" class="muted">no diskette</span>
+      </div>
+      <div class="controls">
+        <span class="label">Hard disk</span>
+        <button id="hd-new">New 10 MB</button>
+        <label><input id="hd-load" type="file" accept=".img" hidden><span class="btn">Load .img…</span></label>
+        <button id="hd-download">Download .img</button>
+        <span id="hd-name" class="muted">no hard disk</span>
+      </div>
+    </section>
+
+    <div class="coax"><div class="cable" id="cable"></div><span>ICONET<br>coax</span><span id="packets">0 packets</span></div>
+
+    <!-- ICON workstation -->
+    <section class="machine" id="m1" data-slot="1">
+      <h2>ICON workstation <small id="status1" class="status">off</small></h2>
+      <div class="crt"><canvas id="screen1" width="640" height="240"></canvas></div>
+      <div class="kbd"><span class="ball"></span></div>
+      <div class="pedestal">
+        <div class="lamps">
+          <span class="lamp"><span class="led amber" id="pwr1"></span>power</span>
+          <span class="lamp"><span class="led yellow" id="trouble1"></span>trouble</span>
+        </div>
+        <button class="power" id="power1">Power</button>
+      </div>
+    </section>
   </div>
+
+  <p class="help">
+    To install: insert the <b>ICON Fileserver Boot Diskette</b> (4.01.00), add a hard disk, power on the fileserver and
+    wait for <code>Login:</code>, then power on the workstation. It boots over the network as node 16.
+    Log in as <code>root</code> / <code>superuser</code>. Click a machine to give it the keyboard.
+    F11 / F12 = ACTION, Insert = HELP, Delete = RUBOUT, Scroll Lock = CURSOR LOCK, Home = CLR.
+    The hard disk autosaves in this browser; disk changes apply at the next fileserver power-on.
+  </p>
 </main>
 <script type="module" src="app.js"></script>
 </body>
