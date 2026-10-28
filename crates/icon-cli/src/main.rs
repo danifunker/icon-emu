@@ -109,6 +109,8 @@ fn main() {
     let mut ring: Vec<u32> = Vec::with_capacity(args.trace_last);
     let mut hot: HashMap<u32, u64> = HashMap::new();
     let mut instr = 0u64;
+    let mut loud_ms = 0u64;
+    let mut next_audio = 0u64;
     let mut last_region = u32::MAX;
     let mut region_logs = 0usize;
     let mut tracing = 0usize;
@@ -152,6 +154,14 @@ fn main() {
         *hot.entry(pc).or_insert(0) += 1;
         m.step();
         instr += 1;
+        if m.board.cycles >= next_audio {
+            // Count 10 ms windows with audible speaker output.
+            next_audio = m.board.cycles + (CPU_HZ / 100) as u64;
+            let a = m.board.take_audio(8000);
+            if a.iter().any(|x| x.abs() > 0.05) {
+                loud_ms += 10;
+            }
+        }
         if m.cpu.halted() {
             println!("CPU halted at {pc:05X}");
             break;
@@ -180,7 +190,8 @@ fn main() {
     for (pc, n) in hv.iter().take(8) {
         println!("  {pc:05X}{} x{n}", rom_off(*pc));
     }
-    println!("FA88 (beeper/LED) edges: {}", m.board.fa88_edges);
+    println!("speaker audible for ~{loud_ms} ms");
+    println!("FA88 (trouble LED) edges: {}", m.board.fa88_edges);
     println!("CRTC regs: {:02X?}", &m.board.crtc.regs[..10]);
     println!("palette: {:?}  NVRAM: {:04X?}", m.board.palette, m.board.nvram.words);
     if !m.board.unknown_io.is_empty() {
