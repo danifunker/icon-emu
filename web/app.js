@@ -86,6 +86,35 @@ window.addEventListener("keyup", (e) => keyEvent(e, false));
 window.addEventListener("blur", () => { for (const [k, s] of held) send(s, k | 0x80); held.clear(); });
 setInterval(() => { for (const s of new Set(held.values())) send(s, 0x7f); }, 50); // repeat ticks
 
+// ---- Trackball: click a screen to capture the mouse (Esc releases it)
+for (const slot of [FS, WS]) {
+  const c = $("screen" + slot);
+  c.addEventListener("click", () => { if (net && net.is_on(slot)) c.requestPointerLock(); });
+}
+let tbAcc = [0, 0];
+document.addEventListener("mousemove", (e) => {
+  const locked = document.pointerLockElement;
+  if (!net || !locked) return;
+  const slot = locked.id === "screen0" ? FS : WS;
+  tbAcc[0] += e.movementX; tbAcc[1] += e.movementY;
+  const dx = Math.trunc(tbAcc[0]), dy = Math.trunc(tbAcc[1]);
+  if (dx || dy) { net.trackball(slot, dx, dy); tbAcc = [tbAcc[0] - dx, tbAcc[1] - dy]; }
+});
+// While captured, the mouse buttons are the two ACTION keys.
+document.addEventListener("mousedown", (e) => {
+  const locked = document.pointerLockElement;
+  if (!net || !locked) return;
+  const slot = locked.id === "screen0" ? FS : WS;
+  send(slot, e.button === 2 ? 0x52 : 0x45);
+});
+document.addEventListener("mouseup", (e) => {
+  const locked = document.pointerLockElement;
+  if (!net || !locked) return;
+  const slot = locked.id === "screen0" ? FS : WS;
+  send(slot, (e.button === 2 ? 0x52 : 0x45) | 0x80);
+});
+document.addEventListener("contextmenu", (e) => { if (document.pointerLockElement) e.preventDefault(); });
+
 // ---- Sound
 const RATE = 48000;
 let audio = null, audioTime = 0;

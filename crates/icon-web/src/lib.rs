@@ -80,6 +80,15 @@ impl Network {
         }
     }
 
+    /// Trackball motion in mouse counts (+x right, +y down). The ICON2's
+    /// ICON emulator halves host counts; the X chip is select 01, Y is 00.
+    pub fn trackball(&mut self, slot: usize, dx: i32, dy: i32) {
+        if let Some(m) = self.m_mut(slot) {
+            m.board.counters[1].motion(dx / 2);
+            m.board.counters[0].motion(dy / 2);
+        }
+    }
+
     /// Speaker audio from all machines, mixed, since the last call.
     pub fn audio(&mut self, rate: u32) -> Vec<f32> {
         let mut mix: Vec<f32> = Vec::new();
