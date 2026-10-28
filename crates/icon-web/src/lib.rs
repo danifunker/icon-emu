@@ -45,6 +45,33 @@ impl Emu {
         Ok(())
     }
 
+    /// Attach a hard disk image (drive select 0). Geometry comes from a
+    /// geometry record in block 1 when present, otherwise 4 heads x 17 sectors.
+    pub fn attach_hard_disk(&mut self, data: &[u8]) {
+        let (heads, spt) = if data.len() >= 512 && data[0x10] == 2 && data[0x2F] == 3 {
+            (data[0x13].max(1), u16::from_le_bytes([data[0x1C], data[0x1D]]).max(1) as u8)
+        } else {
+            (4, 17)
+        };
+        self.m.board.attach_hard_disk(Some(Disk::hard_from_image(data.to_vec(), heads, spt)));
+    }
+
+    /// Current hard disk contents (empty if none).
+    pub fn hard_disk_image(&self) -> Vec<u8> {
+        self.m.board.wd.drives[0].as_ref().map(|d| d.data.clone()).unwrap_or_default()
+    }
+
+    /// True if the hard disk changed since the last call (then clears the flag).
+    pub fn take_hard_disk_dirty(&mut self) -> bool {
+        match self.m.board.wd.drives[0].as_mut() {
+            Some(d) if d.dirty => {
+                d.dirty = false;
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn eject_floppy(&mut self) {
         self.m.board.insert_floppy(None);
     }

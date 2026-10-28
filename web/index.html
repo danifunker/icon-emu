@@ -41,9 +41,17 @@
       <label><input id="sound" type="checkbox" checked> sound</label>
       <span id="status">off</span>
     </div>
+    <div class="controls">
+      <strong>Hard disk</strong>
+      <button id="hd-new">New 10 MB disk</button>
+      <label class="file"><input id="hd-load" type="file" accept=".img" hidden><span class="btn">Load .img…</span></label>
+      <button id="hd-download">Download .img</button>
+      <span id="hd-name" class="muted">no hard disk</span>
+    </div>
     <p class="hint">Type straight into the page. F11 / F12 = ACTION keys, Insert = HELP, Delete = RUBOUT,
       Scroll Lock = CURSOR LOCK, Home = CLR. Arrow keys send the keypad cursor keys.
-      Log in as <code>root</code> / <code>superuser</code>.</p>
+      Log in as <code>root</code> / <code>superuser</code>. The hard disk autosaves in this browser; changes
+      to it take effect at the next power-on.</p>
   </div>
 </main>
 <script type="module" src="app.js"></script>

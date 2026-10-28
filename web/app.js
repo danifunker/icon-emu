@@ -1,4 +1,4 @@
-import init, { Emu } from "./pkg/icon_web.js";
+import init, { Emu, blank_hard_disk_10mb } from "./pkg/icon_web.js";
 
 const canvas = document.getElementById("screen");
 const ctx = canvas.getContext("2d");
@@ -13,6 +13,72 @@ const soundBox = document.getElementById("sound");
 let rom = null;
 let emu = null;
 let floppy = null; // { name, data }
+let hardDisk = null; // { name, data } - kept across power cycles
+
+// ---- Hard disk persistence (IndexedDB, this browser only)
+const hdName = document.getElementById("hd-name");
+function idb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("icon-emu", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("disks");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(key, value) {
+  const db = await idb();
+  await new Promise((res, rej) => {
+    const tx = db.transaction("disks", "readwrite");
+    tx.objectStore("disks").put(value, key);
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  });
+}
+async function idbGet(key) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const req = db.transaction("disks").objectStore("disks").get(key);
+    req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error);
+  });
+}
+function showHd(note) {
+  hdName.textContent = hardDisk
+    ? `${hardDisk.name} (${(hardDisk.data.length / 1048576).toFixed(1)} MB)${note ? " · " + note : ""}`
+    : "no hard disk";
+}
+async function saveHd() {
+  if (emu && emu.take_hard_disk_dirty()) hardDisk.data = emu.hard_disk_image();
+  if (hardDisk) {
+    await idbPut("fileserver-hd", hardDisk);
+    showHd("saved " + new Date().toLocaleTimeString());
+  }
+}
+setInterval(() => { saveHd().catch(console.error); }, 5000);
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveHd(); });
+
+document.getElementById("hd-new").addEventListener("click", () => {
+  if (hardDisk && !confirm("Replace the current hard disk with a blank 10 MB disk?")) return;
+  hardDisk = { name: "lexicon-10mb.img", data: blank_hard_disk_10mb() };
+  idbPut("fileserver-hd", hardDisk);
+  showHd(emu ? "attached at next power-on" : "");
+});
+document.getElementById("hd-load").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  hardDisk = { name: file.name, data: new Uint8Array(await file.arrayBuffer()) };
+  idbPut("fileserver-hd", hardDisk);
+  showHd(emu ? "attached at next power-on" : "");
+  e.target.value = "";
+});
+document.getElementById("hd-download").addEventListener("click", () => {
+  if (emu && emu.take_hard_disk_dirty()) hardDisk.data = emu.hard_disk_image();
+  if (!hardDisk) return;
+  const url = URL.createObjectURL(new Blob([hardDisk.data], { type: "application/octet-stream" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = hardDisk.name;
+  a.click();
+  URL.revokeObjectURL(url);
+});
 
 // ---- Keyboard: browser KeyboardEvent.code -> ICON key number (manual Table D-1).
 const KEYS = {
@@ -129,6 +195,7 @@ document.getElementById("floppy").addEventListener("change", async (e) => {
 powerBtn.addEventListener("click", () => {
   startAudio();
   if (emu) {
+    if (hardDisk) { hardDisk.data = emu.hard_disk_image(); saveHd(); }
     emu.free();
     emu = null;
     held.clear();
@@ -140,12 +207,17 @@ powerBtn.addEventListener("click", () => {
   }
   emu = new Emu(rom, "fs", Date.now() / 1000 - new Date().getTimezoneOffset() * 60);
   if (floppy) emu.insert_floppy(floppy.data);
+  if (hardDisk) emu.attach_hard_disk(hardDisk.data);
   powerBtn.classList.add("on");
   powerBtn.blur(); // keep Space/Enter going to the emulator
   requestAnimationFrame(frame);
 });
 
 await init();
+try {
+  const saved = await idbGet("fileserver-hd");
+  if (saved) { hardDisk = saved; showHd("restored from browser storage"); }
+} catch (e) { console.warn("IndexedDB unavailable", e); }
 rom = new Uint8Array(await (await fetch("rom/icon1_rom_combined.bin")).arrayBuffer());
 ctx.fillRect(0, 0, 640, 240);
 status.textContent = "ready: load the fileserver boot diskette, then press Power";
