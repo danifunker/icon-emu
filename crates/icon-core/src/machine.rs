@@ -57,8 +57,16 @@ pub struct Board {
     pub kbd_queue: VecDeque<u8>,
     kbd_latch: u8,
     kbd_pending: bool,
+    kbd_next_at: u64,
     /// Cycle counter, used for video timing.
     pub cycles: u64,
+    /// Speaker: PPI A port C bit 3, toggled directly by software. Level
+    /// changes are timestamped so a front end can render audio.
+    speaker: bool,
+    speaker_edges: Vec<(u64, bool)>,
+    audio_cursor: u64,
+    audio_dc: f32,
+    audio_prev: f32,
     /// When set, every I/O access is appended here: (cycle, port, value, is_write).
     pub io_log: Option<Vec<(u64, u16, u8, bool)>>,
     /// Unhandled I/O accesses seen, for discovering missing hardware.
@@ -93,11 +101,17 @@ impl Machine {
             kbd_queue: VecDeque::from([0xAF, 0xBF]),
             kbd_latch: 0xFF,
             kbd_pending: false,
+            kbd_next_at: 0,
             straps: cfg.straps & 0x1F,
             fa88: 0,
             fa88_edges: 0,
             cycles: 0,
             io_log: None,
+            speaker: false,
+            speaker_edges: Vec::new(),
+            audio_cursor: 0,
+            audio_dc: 0.0,
+            audio_prev: 0.0,
             unknown_io: Default::default(),
         };
         let mut cpu = I80186::new();
@@ -162,16 +176,62 @@ impl Board {
         line < 3
     }
 
+    /// Render the speaker output from the last call up to now as mono
+    /// samples at `rate` Hz (box-filtered square wave, DC removed).
+    pub fn take_audio(&mut self, rate: u32) -> Vec<f32> {
+        let per_sample = CPU_HZ as f64 / rate as f64;
+        let n = ((self.cycles - self.audio_cursor) as f64 / per_sample) as usize;
+        let mut out = Vec::with_capacity(n);
+        let mut edges = std::mem::take(&mut self.speaker_edges).into_iter().peekable();
+        // Level at the start of this block: the first edge's opposite, or now.
+        let mut level = match edges.peek() {
+            Some(&(_, l)) => !l,
+            None => self.speaker,
+        };
+        for i in 0..n {
+            let start = self.audio_cursor as f64 + i as f64 * per_sample;
+            let end = start + per_sample;
+            let mut high = 0.0;
+            let mut t = start;
+            while let Some(&(c, l)) = edges.peek() {
+                let c = c as f64;
+                if c >= end {
+                    break;
+                }
+                if level {
+                    high += c.max(t) - t;
+                }
+                t = c.max(t);
+                level = l;
+                edges.next();
+            }
+            if level {
+                high += end - t;
+            }
+            let x = (high / per_sample) as f32 * 2.0 - 1.0;
+            // One-pole DC blocker so an idle speaker is silent.
+            let y = x - self.audio_prev + 0.995 * self.audio_dc;
+            self.audio_prev = x;
+            self.audio_dc = y;
+            out.push(y * 0.25);
+        }
+        self.audio_cursor += (n as f64 * per_sample) as u64;
+        self.speaker_edges = edges.collect(); // edges after this block's end
+        out
+    }
+
     /// Queue a key press or release (raw code: key number, bit 7 = release).
     pub fn key(&mut self, code: u8) {
         self.kbd_queue.push_back(code);
     }
 
     fn service_keyboard(&mut self) {
-        if !self.kbd_pending {
+        // The keyboard MCU sends a byte at most every ~2 ms.
+        if !self.kbd_pending && self.cycles >= self.kbd_next_at {
             if let Some(code) = self.kbd_queue.pop_front() {
                 self.kbd_latch = !code;
                 self.kbd_pending = true;
+                self.kbd_next_at = self.cycles + 15_000;
             }
         }
     }
@@ -261,6 +321,13 @@ impl Board {
     fn update_pins(&mut self) {
         let pb = self.ppi_a.port_b_out();
         let pc = self.ppi_a.port_c_out();
+        let spk = pc & 0x08 != 0;
+        if spk != self.speaker {
+            self.speaker = spk;
+            if self.speaker_edges.len() < 1 << 16 {
+                self.speaker_edges.push((self.cycles, spk));
+            }
+        }
         let sel = self.microwire_select();
         let (sk, di) = (pc & 0x02 != 0, pc & 0x01 != 0);
         self.nvram.set_pins(sel == Some(2), sk, di);

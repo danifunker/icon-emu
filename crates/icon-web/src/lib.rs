@@ -59,6 +59,17 @@ impl Emu {
         self.m.board.fa88 & 1 != 0
     }
 
+    /// Speaker audio produced since the last call, as mono f32 samples.
+    pub fn audio(&mut self, rate: u32) -> Vec<f32> {
+        self.m.board.take_audio(rate)
+    }
+
+    /// Hard-disk / floppy activity, for the front-panel LEDs.
+    pub fn disk_activity(&self) -> u8 {
+        let a = &self.m.board.wd.activity;
+        (a[0] > 0) as u8 | (((a[3] > 0) as u8) << 1)
+    }
+
     /// One-line status for the debug readout.
     pub fn status(&self) -> String {
         let r = self.m.cpu.regs();

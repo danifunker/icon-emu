@@ -19,6 +19,7 @@ struct Args {
     screen: Option<String>,
     floppy: Option<String>,
     regions: usize,
+    type_text: Vec<(f64, String)>,
     trace_from: Option<u32>,
     trace_count: usize,
     hd: Option<String>,
@@ -47,6 +48,7 @@ fn parse_args() -> Args {
         screen: None,
         floppy: None,
         regions: 0,
+        type_text: Vec::new(),
         trace_from: None,
         trace_count: 2000,
         hd: None,
@@ -65,6 +67,12 @@ fn parse_args() -> Args {
             "--screen" => a.screen = Some(v()),
             "--floppy" => a.floppy = Some(v()),
             "--regions" => a.regions = parse_num(&v()) as usize,
+            "--type" => {
+                // --type SECONDS:TEXT  (\r for Enter)
+                let s = v();
+                let (t, text) = s.split_once(':').expect("--type SECONDS:TEXT");
+                a.type_text.push((t.parse().unwrap(), text.replace("\\r", "\r")));
+            }
             "--trace-from" => a.trace_from = Some(parse_num(&v())),
             "--trace-count" => a.trace_count = parse_num(&v()) as usize,
             "--hd" => a.hd = Some(v()),
@@ -79,7 +87,7 @@ fn parse_args() -> Args {
 }
 
 fn main() {
-    let args = parse_args();
+    let mut args = parse_args();
     let rom = std::fs::read(&args.rom).expect("read ROM");
     let nvram = match args.preset.as_str() {
         "ws" => presets::workstation(),
@@ -120,6 +128,12 @@ fn main() {
                 r.cs, r.ip, r.ax, r.bx, r.cx, r.dx, r.si, r.di, r.bp, r.sp, r.ds, r.es, r.flags);
             tracing -= 1;
             if tracing == 0 { m.board.io_log = None; }
+        }
+        if let Some(i) = args.type_text.iter().position(|(t, _)| m.board.cycles as f64 >= t * CPU_HZ as f64) {
+            let (_, text) = args.type_text.remove(i);
+            for k in icon_core::devices::keyboard::type_text(&text) {
+                m.board.key(k);
+            }
         }
         if region_logs < args.regions && pc >> 12 != last_region {
             let r = m.cpu.regs();
