@@ -1,0 +1,20 @@
+0 fs power
+40 ws power
+105 ws type root\r
+109 ws type superuser\r
+115 fs floppy DISKS/System 4.10.01/ICON_SERIES_HELP_DISKETTE_4.10.01_EXCEPTION_REL.SEP_17_1991.img
+120 ws type install_software\r
+161 ws mouse -152 -57
+163 ws key 45
+163.2 ws key C5
+171 ws mouse 265 146
+173 ws key 45
+173.2 ws key C5
+231 ws key 45
+231.2 ws key C5
+261 ws key 45
+261.2 ws key C5
+451 ws type \r
+485 fs eject
+490 ws key 45
+490.2 ws key C5

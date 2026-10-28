@@ -50,3 +50,19 @@ ICON_DISKS="/Volumes/Software/ICON_ICON2/From YorkU/UNISYS_ICON/Disk_1" \
 
 - Physical block 1: boot loader pointer (+2 start 3, +4 count 14), new-format geometry record at +10 (4 heads, 20,808 blocks, 68 sectors/cylinder, 17 sectors/track), BBT record at +30, **PC-style partition table at +1BE**, AA55 at +1FE.
 - One partition, **type 0x07** (QNX 2), start **30**, size 20,779. The start is a **1-based QNX block number**: the partition's block 1 is LBA 29.
+
+## Adding packages afterwards (e.g. the On-line Help diskette)
+
+Packages other than the System Software (Help, QDOS, languages …) go in with `install_software`, which reads each package's `/package` descriptor and runs its install script (`HELP_1` for Help).
+
+1. Fileserver: load the installed hard disk, **no floppy**, **Power**. It boots 4.10.01 from the hard disk.
+2. Workstation: **Power** (it network-boots 4.10 from the fileserver), log in `root` / `superuser`.
+3. Insert the package's first diskette in the fileserver (e.g. `System 4.10.01/ICON_SERIES_HELP_DISKETTE_4.10.01_EXCEPTION_REL.SEP_17_1991.img`). Booted from its hard disk, the fileserver's floppy is **drive 2**, which is what `install_software` defaults to.
+4. On the workstation type `install_software`. With the mouse captured:
+   1. Click the fileserver's row (**network, node 1**) so it highlights.
+   2. Click **Perform** → "Please put the first diskette of the package in the diskette drive of node 1" → **OK**.
+   3. "Installing ICON Series On_line Help Version 4.10.00 … Are you sure you want to install HELP on node 1?" → **OK**.
+   4. When the title bar says *Press any key to continue*, press a key → "HELP diskette 1 of 1 successfully installed on node 1" → **OK**, then **Quit**.
+5. Eject the floppy. **Download .img** to keep the disk.
+
+Headless: `scripts/install-help.txt` (start from the installed disk with `--hd`, no `--floppy`). Result kept as `disks/lexicon-4.10.01-10mb-help.img`: 130 pages in `/help/qnx` plus `/util/help`.
