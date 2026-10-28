@@ -1,0 +1,14 @@
+# icon-ci smoke test: start the server with an installed 4.10.01 disk first, e.g.
+#   icon-cli serve --hd disks/lexicon-4.10.01-10mb.img
+power 0
+login
+run query 1
+run files [1]1:/user
+power 1
+login 1
+run --slot 1 date
+add-workstation
+power 2
+login 2
+run --slot 2 files [1]1:/user
+status

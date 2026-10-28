@@ -65,6 +65,13 @@
   .cable { width: 100%; height: 8px; background: #111; border-radius: 4px; position: relative; overflow: hidden; }
   .cable.busy::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--green), transparent); animation: flow .5s linear infinite; }
   @keyframes flow { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .workstations { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+  .add-ws { display: flex; gap: 8px; margin-top: 12px; }
+  .add-ws button, .rom button, .rom .btn { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px;
+                                           padding: 5px 11px; cursor: pointer; font: inherit; font-size: 13px; }
+  .rom { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; font-size: 13px; }
+  .rom .label { font-weight: 600; }
+  .rom.missing { background: #3a2c16; border: 1px solid var(--amber); border-radius: 8px; padding: 10px 12px; }
   .help { color: var(--muted); font-size: 13px; margin-top: 18px; max-width: 1100px; }
   code { background: #0004; padding: 1px 5px; border-radius: 4px; }
 </style>
@@ -73,9 +80,17 @@
 <main>
   <header>
     <h1>ICON Network</h1>
-    <span class="sub">LEXICON fileserver and ICON workstation on one ICONET segment. Real 5053 ISS 2 boot ROM, emulated.</span>
+    <span class="sub">A LEXICON fileserver and ICON workstations on one ICONET segment.</span>
     <label class="sub" style="margin-left:auto"><input id="sound" type="checkbox" checked> sound</label>
   </header>
+
+  <div class="rom" id="rom-bar">
+    <span class="label">Boot ROM</span>
+    <span id="rom-name" class="sub">none loaded</span>
+    <label><input id="rom-load" type="file" multiple hidden><span class="btn">Load ROM…</span></label>
+    <button id="rom-forget" hidden>Forget</button>
+    <span id="rom-note" class="sub"></span>
+  </div>
 
   <div class="net">
     <!-- LEXICON fileserver -->
@@ -112,24 +127,37 @@
 
     <div class="coax"><div class="cable" id="cable"></div><span>ICONET<br>coax</span><span id="packets">0 packets</span></div>
 
-    <!-- ICON workstation -->
-    <section class="machine" id="m1" data-slot="1">
-      <h2>ICON workstation <small id="status1" class="status">off</small></h2>
-      <div class="crt"><canvas id="screen1" width="640" height="240"></canvas></div>
+    <!-- ICON workstations (cloned from the template below) -->
+    <div>
+      <div class="workstations" id="workstations"></div>
+      <div class="add-ws">
+        <button id="ws-add">Add workstation</button>
+        <button id="ws-remove">Remove last</button>
+      </div>
+    </div>
+  </div>
+
+  <template id="ws-template">
+    <section class="machine">
+      <h2><span class="ws-title">ICON workstation</span> <small class="status">off</small></h2>
+      <div class="crt"><canvas width="640" height="240"></canvas></div>
       <div class="kbd"><span class="ball"></span></div>
       <div class="pedestal">
         <div class="lamps">
-          <span class="lamp"><span class="led amber" id="pwr1"></span>power</span>
-          <span class="lamp"><span class="led yellow" id="trouble1"></span>trouble</span>
+          <span class="lamp"><span class="led amber pwr"></span>power</span>
+          <span class="lamp"><span class="led yellow trouble"></span>trouble</span>
         </div>
-        <button class="power" id="power1">Power</button>
+        <button class="power">Power</button>
       </div>
     </section>
-  </div>
+  </template>
 
   <p class="help">
+    The boot ROM is not included: load the 32 KB interleaved image, or both 16 KB EPROM dumps at once
+    (5053-1 = even bytes, 5053-2 = odd). It is kept in this browser only. Each workstation boots over the
+    network as node 15 + its number (16, 17, …).
     To install: insert the <b>ICON Fileserver Boot Diskette</b> (4.01.00), add a hard disk, power on the fileserver and
-    wait for <code>Login:</code>, then power on the workstation. It boots over the network as node 16.
+    wait for <code>Login:</code>, then power on a workstation.
     Log in as <code>root</code> / <code>superuser</code>. Click a machine to give it the keyboard.
     Click a screen to use the mouse as the trackball (left/right button = the two ACTION keys; Esc releases).
     F11 / F12 = ACTION, Insert = HELP, Delete = RUBOUT, Scroll Lock = CURSOR LOCK, Home = CLR.

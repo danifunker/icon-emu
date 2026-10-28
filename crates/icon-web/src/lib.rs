@@ -1,5 +1,5 @@
 //! WebAssembly front end: an ICONET segment with a LEXICON fileserver
-//! (slot 0) and an ICON workstation (slot 1).
+//! (slot 0) and one or more ICON workstations (slots 1.., node 15 + slot).
 
 use icon_core::devices::nvram::presets;
 use icon_core::devices::wd1002::Disk;
@@ -24,6 +24,13 @@ pub fn blank_hard_disk_64mb() -> Vec<u8> {
     Disk::blank_hard(c, h, s).data
 }
 
+fn check_rom(rom: &[u8]) -> Result<(), JsError> {
+    if rom.len() != 0x8000 {
+        return Err(JsError::new("expected a 32 KB ROM image (the two 16 KB EPROMs interleaved, even bytes first)"));
+    }
+    Ok(())
+}
+
 #[wasm_bindgen]
 pub struct Network {
     lan: Lan,
@@ -34,21 +41,57 @@ pub struct Network {
 impl Network {
     #[wasm_bindgen(constructor)]
     pub fn new(rom: &[u8]) -> Result<Network, JsError> {
-        if rom.len() != 0x8000 {
-            return Err(JsError::new("expected the 32 KB interleaved ICON ROM"));
-        }
+        check_rom(rom)?;
         Ok(Network { lan: Lan::new(2), rom: rom.to_vec() })
+    }
+
+    /// Replace the boot ROM; machines pick it up at their next power-on.
+    pub fn set_rom(&mut self, rom: &[u8]) -> Result<(), JsError> {
+        check_rom(rom)?;
+        self.rom = rom.to_vec();
+        Ok(())
+    }
+
+    /// Number of slots (fileserver plus workstations).
+    pub fn slots(&self) -> usize {
+        self.lan.nodes.len()
+    }
+
+    /// Add a workstation slot (powered off); returns its slot number.
+    pub fn add_workstation(&mut self) -> usize {
+        self.lan.nodes.push(None);
+        self.lan.grow();
+        self.lan.nodes.len() - 1
+    }
+
+    /// Remove the last workstation slot if it is off and not the only one.
+    pub fn remove_workstation(&mut self) -> bool {
+        if self.lan.nodes.len() <= 2 || self.lan.nodes.last().is_some_and(|n| n.is_some()) {
+            return false;
+        }
+        self.lan.nodes.pop();
+        self.lan.grow();
+        true
     }
 
     /// Power a machine on. `host_time` is local wall-clock seconds (for the
     /// fileserver's battery clock); disks are attached separately.
     pub fn power_on(&mut self, slot: usize, host_time: f64) {
+        if slot >= self.lan.nodes.len() {
+            return;
+        }
         let fs = slot == FILESERVER;
         let m = Machine::new(Config {
             rom: self.rom.clone(),
             patch_800k_floppy: false,
             ram_kb: 512,
-            nvram: if fs { presets::fileserver() } else { presets::workstation() },
+            nvram: if fs {
+                presets::fileserver()
+            } else {
+                let mut nv = presets::workstation();
+                nv[10] = (((15 + slot) as u16) << 8) | 1; // own node ID, boot server 1
+                nv
+            },
             straps: STRAPS_NORMAL,
             host_time: host_time as i64,
             disk_controller: fs,
@@ -61,7 +104,7 @@ impl Network {
     }
 
     pub fn is_on(&self, slot: usize) -> bool {
-        self.lan.nodes[slot].is_some()
+        self.lan.nodes.get(slot).is_some_and(|n| n.is_some())
     }
 
     /// Run every powered machine for one 60 Hz frame.
