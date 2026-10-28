@@ -2,6 +2,8 @@
 //! ended up, which I/O ports were touched but not emulated, and dump RAM or
 //! a guessed frame buffer.
 
+mod serve;
+
 use icon_core::devices::nvram::presets;
 use icon_core::devices::wd1002::Disk;
 use icon_core::machine::{Config, Machine, CPU_HZ, STRAPS_NORMAL};
@@ -106,7 +108,78 @@ fn parse_args() -> Args {
     a
 }
 
+/// `icon-cli session ...`: headless fileserver session for automated tests.
+///
+///   icon-cli session [--rom F] [--hd IMG] [--floppy IMG] [--user U --password P]
+///                    [--cmd "files 1:/ +v"]... [--insert-floppy IMG] [--save-hd OUT]
+///                    [--save-floppy OUT] [--transcript OUT]
+///
+/// Boots a LEXICON fileserver, logs in (root/superuser by default), runs each
+/// --cmd in order (an --insert-floppy between commands swaps the diskette at
+/// that point) and prints each command's output between `=== CMD` markers.
+/// Exit status 1 on a timeout.
+fn session_main(argv: Vec<String>) {
+    use icon_core::session::Session;
+    let mut rom = format!("{}/repos/icon_icon2_research/firmware/ICON1/icon1_rom_combined.bin", std::env::var("HOME").unwrap_or_default());
+    let (mut hd, mut fd) = (None, None);
+    let (mut user, mut pass) = ("root".to_string(), "superuser".to_string());
+    let mut steps: Vec<(String, String)> = Vec::new();
+    let (mut save_hd, mut save_fd, mut transcript) = (None, None, None);
+    let mut it = argv.into_iter();
+    while let Some(k) = it.next() {
+        let mut v = || it.next().unwrap_or_else(|| panic!("missing value for {k}"));
+        match k.as_str() {
+            "--rom" => rom = v(),
+            "--hd" => hd = Some(std::fs::read(v()).expect("read hd")),
+            "--floppy" => fd = Some(std::fs::read(v()).expect("read floppy")),
+            "--user" => user = v(),
+            "--password" => pass = v(),
+            "--cmd" => steps.push(("cmd".into(), v())),
+            "--insert-floppy" => steps.push(("insert".into(), v())),
+            "--eject" => steps.push(("eject".into(), String::new())),
+            "--save-hd" => save_hd = Some(v()),
+            "--save-floppy" => save_fd = Some(v()),
+            "--transcript" => transcript = Some(v()),
+            _ => panic!("unknown session argument {k}"),
+        }
+    }
+    let rom = std::fs::read(&rom).expect("read ROM");
+    let fail = |e: icon_core::session::SessionError| -> ! {
+        eprintln!("session error: {e}");
+        std::process::exit(1)
+    };
+    let mut s = Session::fileserver(&rom, hd, fd).unwrap_or_else(|e| fail(e));
+    s.login(&user, &pass).unwrap_or_else(|e| fail(e));
+    for (kind, arg) in steps {
+        match kind.as_str() {
+            "cmd" => {
+                let out = s.run(&arg).unwrap_or_else(|e| fail(e));
+                println!("=== CMD {arg}\n{out}");
+            }
+            "insert" => s.insert_floppy(Some(std::fs::read(&arg).expect("read floppy"))).unwrap_or_else(|e| fail(e)),
+            _ => s.insert_floppy(None).unwrap(),
+        }
+    }
+    println!("=== END");
+    if let (Some(p), Some(d)) = (save_hd, s.hard_disk()) {
+        std::fs::write(p, d).expect("write hd");
+    }
+    if let (Some(p), Some(d)) = (save_fd, s.floppy()) {
+        std::fs::write(p, d).expect("write floppy");
+    }
+    if let Some(p) = transcript {
+        std::fs::write(p, s.transcript()).expect("write transcript");
+    }
+}
+
 fn main() {
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+    if argv.first().map(String::as_str) == Some("session") {
+        return session_main(argv[1..].to_vec());
+    }
+    if argv.first().map(String::as_str) == Some("serve") {
+        return serve::main(argv[1..].to_vec());
+    }
     let mut args = parse_args();
     let rom = std::fs::read(&args.rom).expect("read ROM");
     let nvram = match args.preset.as_str() {
@@ -306,6 +379,8 @@ fn run_lan(fs: Machine, args: &Args, ws_at: f64) {
 ///   fs floppy PATH | fs eject       change the fileserver's diskette
 ///   shot NAME                       save both screens as NAME_fs.ppm / NAME_ws.ppm
 ///   save PATH                       write the fileserver's hard disk image
+///   savefloppy PATH                 write the fileserver's diskette image
+///   text NAME                       save each screen's decoded text as NAME_fs.txt / NAME_ws.txt
 fn run_script(fs: Machine, args: &Args, path: &str) {
     use icon_core::lan::Lan;
     // `DISKS/` in a script stands for $ICON_DISKS (the folder holding the
@@ -421,6 +496,23 @@ fn run_script(fs: Machine, args: &Args, path: &str) {
                     }
                 }
                 ("save", _) => save_hd(&lan, fs.as_ref(), verb),
+                ("text", _) => {
+                    // Decoded console text of each running machine.
+                    for (i, tag) in [(0, "fs"), (1, "ws")] {
+                        if let Some(m) = lan.nodes[i].as_ref() {
+                            std::fs::write(shot_dir.join(format!("{verb}_{tag}.txt")), m.board.screen_text()).unwrap();
+                        }
+                    }
+                }
+                ("ram", _) => {
+                    // RAM of each running machine, plus its display base (debugging).
+                    for (i, tag) in [(0, "fs"), (1, "ws")] {
+                        if let Some(m) = lan.nodes[i].as_ref() {
+                            std::fs::write(shot_dir.join(format!("{verb}_{tag}.ram")), &m.board.ram).unwrap();
+                            println!("{tag}: frame base {:05X}", m.board.frame_base());
+                        }
+                    }
+                }
                 ("savefloppy", _) => {
                     let m = lan.nodes[0].as_ref().or(fs.as_ref());
                     if let Some(d) = m.and_then(|m| m.board.wd.drives[3].as_ref()) {

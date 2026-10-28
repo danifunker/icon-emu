@@ -26,6 +26,11 @@ impl Lan {
         Self { nodes: (0..slots).map(|_| None).collect(), tx_seen: vec![None; slots], packets: 0 }
     }
 
+    /// Keep internal per-slot state in step after `nodes` grows.
+    pub fn grow(&mut self) {
+        self.tx_seen.resize(self.nodes.len(), None);
+    }
+
     pub fn power_on(&mut self, slot: usize, mut m: Machine) {
         m.board.arcnet.networked = true;
         // Line up the new machine's clock with the others so delivery timing works.

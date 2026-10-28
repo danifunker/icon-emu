@@ -6,3 +6,12 @@ license.workspace = true
 
 [dependencies]
 icon-core = { path = "../icon-core" }
+serde_json = "1"
+
+[[bin]]
+name = "icon-cli"
+path = "src/main.rs"
+
+[[bin]]
+name = "icon-ci"
+path = "src/bin/icon_ci.rs"

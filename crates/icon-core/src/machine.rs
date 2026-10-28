@@ -79,6 +79,8 @@ pub struct Board {
     /// Debug: log writes to this linear address range as (cycle, addr, value).
     pub watch: Option<(u32, u32)>,
     pub watch_log: Vec<(u64, u32, u8)>,
+    /// Cached RAM address of the running kernel's console font table.
+    font_at: std::cell::Cell<Option<usize>>,
     /// Address of the instruction being executed (set by `Machine::step`).
     pub cur_pc: u32,
     pub watch_pcs: Vec<u32>,
@@ -136,6 +138,7 @@ impl Machine {
             watch: None,
             watch_log: Vec::new(),
             cur_pc: 0,
+            font_at: std::cell::Cell::new(None),
             watch_pcs: Vec::new(),
             speaker: false,
             speaker_edges: Vec::new(),
@@ -306,6 +309,158 @@ impl Board {
             _ => 0x1ABA0,
         };
         if self.ppi_a.port_b_out() & 1 != 0 { base } else { base - 0x8000 }
+    }
+
+    /// Decode the text console back into characters.
+    ///
+    /// The QNX console draws 8x10 glyphs on rows 9 lines apart (each glyph's
+    /// bottom line overlaps the next row's top). Glyphs come from the running
+    /// kernel's font table when it can be found in RAM (it differs from the
+    /// ROM font in a dozen characters), otherwise from the ROM font at file
+    /// 0x2CF4. Glyph bytes are bottom row first, LSB = leftmost pixel.
+    /// Inverse cells (the cursor) decode too; unknown cells become '?'.
+    pub fn screen_text(&self) -> String {
+        const ROM_FONT: usize = 0x2CF4;
+        let rom_glyph = |c: u8| &self.rom[ROM_FONT + (c - 0x20) as usize * 10..][..10];
+        let kernel = self.kernel_font();
+        // Glyph c from the font table starting at `table` (bottom row first),
+        // returned top row first.
+        let glyph_at = |table: Option<usize>, c: u8| -> [u8; 10] {
+            let g: &[u8] = match table {
+                Some(k) => self.ram.get(k + c as usize * 10..k + c as usize * 10 + 10).unwrap_or(&[0; 10]),
+                None => rom_glyph(c),
+            };
+            let mut top_first = [0u8; 10];
+            for k in 0..10 {
+                top_first[k] = g[9 - k];
+            }
+            top_first
+        };
+        // Each table pairs a 10-line lookup (needed for '_', whose pixels
+        // are on the 10th line) with a top-9-line one, so an overlapping 10th
+        // line from the next row doesn't matter.
+        type Tables = (HashMap<[u8; 10], char>, HashMap<[u8; 9], char>);
+        use std::collections::HashMap;
+        let build = |t: Option<usize>| -> Tables {
+            let (mut t10, mut t9) = (HashMap::new(), HashMap::new());
+            for c in (0x20u8..0x7F).rev() {
+                let g = glyph_at(t, c);
+                let mut top = [0u8; 9];
+                top.copy_from_slice(&g[..9]);
+                t9.insert(top, c as char);
+                t9.entry(top.map(|b| !b)).or_insert(c as char);
+                if c != b' ' && g != [0; 10] {
+                    t10.insert(g, c as char);
+                }
+            }
+            (t10, t9)
+        };
+        // The kernel's table comes first; the ROM font is the fallback, since
+        // the 4.10 workstation kernel keeps a table like the 4.01 one in RAM
+        // but draws its console with the ROM's glyphs.
+        let tables: Vec<Tables> = match kernel {
+            Some(k) => vec![build(Some(k)), build(None)],
+            None => vec![build(None)],
+        };
+        let base = self.frame_base() as usize;
+        let raw = |line: usize, col: usize| self.ram.get(base + line * 80 + col).copied().unwrap_or(0);
+        // The 4.10 workstation kernel draws glyphs one pixel left of the cell
+        // (its leftmost column lands in the previous byte), so cells are also
+        // read shifted by one pixel; the screen decides.
+        let byte = |shift: u32, line: usize, col: usize| -> u8 {
+            match shift {
+                0 => raw(line, col),
+                _ => (raw(line, col) << 1) | if col < 79 { raw(line, col + 1) >> 7 } else { 0 },
+            }
+        };
+        let decode = |shift: u32, line: usize, col: usize| -> Option<char> {
+            let mut ten = [0u8; 10];
+            for k in 0..10 {
+                ten[k] = byte(shift, line + k, col);
+            }
+            let mut nine = [0u8; 9];
+            nine.copy_from_slice(&ten[..9]);
+            tables.iter().find_map(|(t10, t9)| t10.get(&ten).or_else(|| t9.get(&nine)).copied())
+        };
+        // Rows are found top to bottom: wherever pixels appear, the next 9
+        // line offsets and both pixel shifts are tried, and the one decoding
+        // the most characters (less the cells it can't) is taken. Console
+        // rows sit on a fixed 9-line grid, but the workstation's login screen
+        // puts its banner and prompt on different grids.
+        let row = |shift: u32, line: usize| -> (i32, String) {
+            let mut score = 0;
+            let text = (0..80)
+                // A cell the row's shift can't read may still read at the other.
+                .map(|c| match decode(shift, line, c).or_else(|| decode(1 - shift, line, c)) {
+                    Some(ch) => {
+                        score += (ch != ' ') as i32;
+                        ch
+                    }
+                    None => {
+                        score -= 1;
+                        '?'
+                    }
+                })
+                .collect();
+            (score, text)
+        };
+        let blank = |line: usize| (0..80).all(|c| raw(line, c) == 0);
+        let mut out = String::new();
+        let mut line = 0;
+        while line <= 231 {
+            if (line..line + 9).all(blank) {
+                out.push('\n');
+                line += 9;
+                continue;
+            }
+            let (_, o, text) = (0..9usize)
+                .filter(|o| line + o <= 231)
+                .flat_map(|o| (0..2u32).map(move |s| (s, o)))
+                .map(|(s, o)| {
+                    let (score, text) = row(s, line + o);
+                    (score, o, text)
+                })
+                .max_by_key(|(score, o, _)| (*score, std::cmp::Reverse(*o)))
+                .unwrap();
+            out.push_str(text.trim_end());
+            out.push('\n');
+            line += o + 9;
+        }
+        out
+    }
+
+    /// Locate the kernel's console font: a table of 10-byte glyphs indexed
+    /// from character 0 in which most capital letters match the ROM font
+    /// (kernels differ in a few glyphs, so no single letter is trusted). The
+    /// address is cached and re-checked cheaply on later calls.
+    fn kernel_font(&self) -> Option<usize> {
+        const ROM_FONT: usize = 0x2CF4;
+        let rom_glyph = |c: u8| &self.rom[ROM_FONT + (c - 0x20) as usize * 10..][..10];
+        let score = |base: usize| -> usize {
+            (b'A'..=b'Z')
+                .filter(|&c| self.ram.get(base + c as usize * 10..base + c as usize * 10 + 10) == Some(rom_glyph(c)))
+                .count()
+        };
+        if let Some(b) = self.font_at.get() {
+            if score(b) >= 20 {
+                return Some(b);
+            }
+        }
+        for anchor in [b'H', b'E', b'T', b'N', b'S'] {
+            let g = rom_glyph(anchor);
+            let mut i = 0;
+            while let Some(p) = self.ram[i..].windows(10).position(|w| w == g) {
+                let at = i + p;
+                if let Some(base) = at.checked_sub(anchor as usize * 10) {
+                    if score(base) >= 20 {
+                        self.font_at.set(Some(base));
+                        return Some(base);
+                    }
+                }
+                i = at + 1;
+            }
+        }
+        None
     }
 
     /// Render the display as 640x240 RGBA. 1 bpp: pixel 0 -> F900, pixel 1
