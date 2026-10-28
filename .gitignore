@@ -1,7 +1,8 @@
 target/
 *.png
 /roms/
-/disks/
+/disks/*
+!/disks/hd64-factory.bin
 /testdata/
 web/pkg/
 web/rom/
