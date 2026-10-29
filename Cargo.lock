@@ -67,6 +67,7 @@ dependencies = [
 [[package]]
 name = "qnx2fs"
 version = "0.1.0"
+source = "git+https://github.com/danifunker/qnx2fs#54c5d2cebdcaf871735a8c99da7db36d29c8dd8a"
 
 [[package]]
 name = "quote"
