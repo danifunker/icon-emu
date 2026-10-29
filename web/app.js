@@ -578,6 +578,18 @@ kinds.forEach((kind, i) => addMachine(i + 1, kind));
 setFocus(FS);
 layoutBus();
 
+// Build stamp: the last commit's date and hash, written by scripts/web-version.sh.
+fetch("version.json", { cache: "no-store" })
+  .then((r) => (r.ok ? r.json() : null))
+  .then((v) => {
+    if (!v?.commit) return;
+    const a = document.createElement("a");
+    a.href = `https://github.com/danifunker/icon-emu/commit/${v.commit}`;
+    a.textContent = v.commit;
+    $("build").append(`build ${v.date} · `, a, v.dirty ? " + local changes" : "");
+  })
+  .catch(() => {});
+
 await init();
 net = new Network();
 while (net.slots() < machines.length) net.add_node(machines[net.slots()].kind);

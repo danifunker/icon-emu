@@ -37,7 +37,8 @@ jobs:
       - name: Assemble the site (no ROM)
         run: |
           mkdir -p site/rom
-          cp -R web/index.html web/app.js web/pkg site/
+          scripts/web-version.sh
+          cp -R web/index.html web/app.js web/version.json web/pkg site/
           cp disks/hd64-factory.bin site/rom/
           touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3

@@ -6,6 +6,7 @@ target/
 /testdata/
 web/pkg/
 web/rom/
+web/version.json
 testdata/
 .DS_Store
 ._*
