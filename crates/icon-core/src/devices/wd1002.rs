@@ -46,13 +46,27 @@ impl Disk {
     /// 64 MB (Micropolis 1335 class) = 1024x8x17.
     pub fn hard_auto(data: Vec<u8>) -> Self {
         let (heads, spt) = if data.len() >= 512 && data[0x10] == 2 && data[0x2F] == 3 {
-            (data[0x13].max(1), u16::from_le_bytes([data[0x1C], data[0x1D]]).max(1) as u8)
+            let (heads, spt) = (data[0x13].max(1), u16::from_le_bytes([data[0x1C], data[0x1D]]).max(1) as u8);
+            return Self::hard_from_image(Self::drop_padded_heads(data, heads, spt), heads, spt);
         } else if data.len() == HD_64MB.0 as usize * HD_64MB.1 as usize * HD_64MB.2 as usize * 512 {
             (HD_64MB.1, HD_64MB.2)
         } else {
             (4, 17)
         };
         Self::hard_from_image(data, heads, spt)
+    }
+
+    /// MFM drive readers can extract a drive as if it had 8 heads (e.g. a
+    /// 6-head ST-251 read as 820 x 8 x 17), leaving the missing heads as zero
+    /// sectors in every cylinder. When the geometry record says fewer heads
+    /// and the image is exactly that 8-head size, keep only the real heads.
+    fn drop_padded_heads(data: Vec<u8>, heads: u8, spt: u8) -> Vec<u8> {
+        let total = u32::from_le_bytes([data[0x14], data[0x15], data[0x16], data[0x17]]) as usize;
+        let (real, padded) = (heads as usize * spt as usize * 512, 8 * spt as usize * 512);
+        if heads >= 8 || total == 0 || data.len() != total / (heads as usize * spt as usize) * padded {
+            return data;
+        }
+        data.chunks(padded).flat_map(|cyl| &cyl[..real]).copied().collect()
     }
 
     pub fn hard_from_image(data: Vec<u8>, heads: u8, sectors: u8) -> Self {
