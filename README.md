@@ -4,6 +4,8 @@ An emulator of the Unisys/CEMCORP **ICON** school computer and its **LEXICON** f
 
 It emulates the 80186 board: video, keyboard, trackball, speaker, NVRAM, battery clock, WD1002 hard-disk/floppy controller, and the ARCNET (ICONET) network. That is enough to boot the original boot ROM and QNX 2 (ICON system software 4.10.01) from the original diskettes, install the system to a hard disk, and network-boot workstations from the fileserver.
 
+**Try it in your browser: <https://danifunker.github.io/icon-emu/>** (you'll need your own ROM; see below).
+
 **No ROM or system software is included.** You need your own dump of the ICON boot ROM (EPROMs 5053-1 and 5053-2) and your own disk images.
 
 ## Quick start
