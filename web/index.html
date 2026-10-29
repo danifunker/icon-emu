@@ -91,6 +91,11 @@
   .rom .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; width: 100%; }
   .rom .row[hidden] { display: none; }
   .rom.missing { background: #3a2c16; border: 1px solid var(--amber); border-radius: 8px; padding: 10px 12px; }
+  .typer { margin-top: 18px; max-width: 1100px; color: var(--muted); font-size: 13px; }
+  .typer summary { cursor: pointer; color: var(--text); }
+  .typer textarea { display: block; width: 100%; margin: 8px 0; min-height: 120px; background: #111214; color: var(--text);
+                    border: 1px solid #44423b; border-radius: 6px; padding: 8px; font: 12px ui-monospace, monospace; }
+  .typer button { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px; padding: 5px 11px; cursor: pointer; font: inherit; }
   .help { color: var(--muted); font-size: 13px; margin-top: 18px; max-width: 1100px; }
   code { background: #0004; padding: 1px 5px; border-radius: 4px; }
 </style>
@@ -185,6 +190,14 @@
       </div>
     </section>
   </template>
+
+  <details class="typer">
+    <summary>Type text into the selected machine</summary>
+    Paste lines below; each is typed into the machine you last clicked, followed by Enter, one line at a time.
+    Only plain ASCII is typed. Useful for long commands, or for speech phrases made with <code>scripts/lpc_encode.py --paste</code>.
+    <textarea id="type-text" spellcheck="false" placeholder="echo hello"></textarea>
+    <button id="type-go">Type it</button> <button id="type-stop">Stop</button> <span id="type-status"></span>
+  </details>
 
   <p class="help">
     The boot ROM is not included: load the 32 KB interleaved image, or both 16 KB EPROM dumps at once

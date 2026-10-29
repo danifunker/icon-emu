@@ -162,6 +162,20 @@ impl Network {
         }
     }
 
+    /// Type ASCII text on a machine's keyboard (`\r` = Enter).
+    pub fn type_text(&mut self, slot: usize, text: &str) {
+        if let Some(m) = self.m_mut(slot) {
+            for k in icon_core::devices::keyboard::type_text(text) {
+                m.board.key(k);
+            }
+        }
+    }
+
+    /// Key events still waiting to be sent to a machine's keyboard.
+    pub fn keys_pending(&self, slot: usize) -> usize {
+        self.m(slot).map(|m| m.board.kbd_queue.len()).unwrap_or(0)
+    }
+
     /// Trackball motion in mouse counts (+x right, +y down). The ICON2's
     /// ICON emulator halves host counts; the X chip is select 01, Y is 00.
     pub fn trackball(&mut self, slot: usize, dx: i32, dy: i32) {

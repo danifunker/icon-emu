@@ -118,6 +118,66 @@ fn parse_args() -> Args {
 /// --cmd in order (an --insert-floppy between commands swaps the diskette at
 /// that point) and prints each command's output between `=== CMD` markers.
 /// Exit status 1 on a timeout.
+/// `icon-cli lpc-render FRAMES.txt OUT.wav`: play a phrase listing (the
+/// `decode_phrase` text format: energy pitch k1..k10 per line) through the
+/// emulated TMS5220C, the way the ICON does it (Speak External, topping up
+/// the FIFO whenever it runs low), and write an 8 kHz WAV.
+fn lpc_render(argv: &[String]) {
+    use icon_core::devices::tms5220::Tms5220;
+    let (Some(src), Some(dst)) = (argv.first(), argv.get(1)) else {
+        eprintln!("usage: icon-cli lpc-render FRAMES.txt OUT.wav");
+        std::process::exit(2)
+    };
+    const KBITS: [u32; 10] = [5, 5, 4, 4, 4, 4, 4, 3, 3, 3];
+    let mut bits: Vec<u8> = Vec::new();
+    let put = |v: usize, n: u32, bits: &mut Vec<u8>| (0..n).rev().for_each(|i| bits.push(((v >> i) & 1) as u8));
+    for line in std::fs::read_to_string(src).expect("read frames").lines() {
+        let f: Vec<usize> = line.split_whitespace().filter_map(|w| w.parse().ok()).collect();
+        if f.len() < 2 {
+            continue;
+        }
+        put(f[0], 4, &mut bits);
+        if f[0] == 0 || f[0] == 15 {
+            continue;
+        }
+        put(0, 1, &mut bits); // no repeat
+        put(f[1], 6, &mut bits);
+        let ks = if f[1] == 0 { 4 } else { 10 };
+        (0..ks).for_each(|i| put(f.get(2 + i).copied().unwrap_or(0), KBITS[i], &mut bits));
+    }
+    put(15, 4, &mut bits); // stop frame
+    // The chip takes each byte's bits LSB first.
+    let bytes: Vec<u8> = bits.chunks(8).map(|c| c.iter().enumerate().fold(0, |b, (i, &v)| b | v << i)).collect();
+    let mut chip = Tms5220::default();
+    chip.write(0x60);
+    let mut next = 0;
+    let mut pcm: Vec<i16> = Vec::new();
+    while pcm.len() < 8000 * 30 {
+        // Top up the FIFO while it is at most half full, like the ICON's driver.
+        while next < bytes.len() && chip.read_status() & 0x40 != 0 {
+            chip.write(bytes[next]);
+            next += 1;
+        }
+        pcm.push(chip.sample());
+        if next >= bytes.len() && chip.read_status() & 0x80 == 0 {
+            break;
+        }
+    }
+    let n = (pcm.len() * 2) as u32;
+    let mut wav = Vec::new();
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + n).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    for v in [16u32, 0x0001_0001, 8000, 16000, 0x0010_0002] {
+        wav.extend_from_slice(&v.to_le_bytes());
+    }
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&n.to_le_bytes());
+    pcm.iter().for_each(|v| wav.extend_from_slice(&v.to_le_bytes()));
+    std::fs::write(dst, wav).expect("write wav");
+    println!("{:.2} s of audio", pcm.len() as f64 / 8000.0);
+}
+
 fn session_main(argv: Vec<String>) {
     use icon_core::session::Session;
     let mut rom = format!("{}/repos/icon_icon2_research/firmware/ICON1/icon1_rom_combined.bin", std::env::var("HOME").unwrap_or_default());
@@ -174,6 +234,9 @@ fn session_main(argv: Vec<String>) {
 
 fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
+    if argv.first().map(String::as_str) == Some("lpc-render") {
+        return lpc_render(&argv[1..]);
+    }
     if argv.first().map(String::as_str) == Some("session") {
         return session_main(argv[1..].to_vec());
     }

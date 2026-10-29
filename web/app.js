@@ -483,11 +483,33 @@ $("rom-same").addEventListener("change", (e) => {
   showRoms(applyRoms());
 });
 
+// ---- Type text: one line at a time into the focused machine, each followed
+// by Enter, waiting until the previous line has been typed and has had a
+// moment to run (a long paste would otherwise overrun QNX's type-ahead).
+let typing = null; // { slot, lines, next, waitUntil }
+$("type-go").addEventListener("click", () => {
+  const lines = $("type-text").value.replace(/\r/g, "").split("\n").filter((l) => l.trim() !== "");
+  if (!net || !net.is_on(focus)) { alert("Power on and click the machine to type into first."); return; }
+  if (lines.length) typing = { slot: focus, lines, next: 0, waitUntil: 0 };
+});
+$("type-stop").addEventListener("click", () => { typing = null; $("type-status").textContent = "stopped"; });
+function pumpTyping() {
+  if (!typing) return;
+  const t = typing;
+  if (!net.is_on(t.slot)) { typing = null; $("type-status").textContent = "machine is off"; return; }
+  if (net.keys_pending(t.slot) > 0 || performance.now() < t.waitUntil) return;
+  if (t.next >= t.lines.length) { typing = null; $("type-status").textContent = `typed ${t.lines.length} line(s)`; return; }
+  net.type_text(t.slot, t.lines[t.next++] + "\r");
+  t.waitUntil = performance.now() + 400;
+  $("type-status").textContent = `typing line ${t.next} of ${t.lines.length}…`;
+}
+
 // ---- Main loop
 function frame() {
   requestAnimationFrame(frame);
   if (!net) return;
   net.run_frame();
+  pumpTyping();
   pushAudio(net.audio(RATE));
   machines.forEach((m, slot) => {
     const on = net.is_on(slot);

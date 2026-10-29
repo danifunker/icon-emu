@@ -120,6 +120,20 @@ say 1:/tmp/a.sp
 
 Those two frames are the voiced sound the boot ROM's speech self-test plays. Each frame lasts 25 ms.
 
+**Making real words** from a recording, on your own computer (needs Python with numpy, and sox):
+
+```
+say -v Daniel -o hello.aiff hello            # any recording works; macOS's say is handy
+sox hello.aiff -r 8000 -c 1 -b 16 hello.wav  # 8 kHz mono 16-bit
+python3 scripts/lpc_encode.py hello.wav > hello.txt                  # the frame listing
+target/release/icon-cli lpc-render hello.txt hello-tms.wav           # preview through the emulated chip
+python3 scripts/lpc_encode.py hello.wav --paste hello > hello.paste.txt
+```
+
+Open **Type text into the selected machine** on the web page, paste `hello.paste.txt`, click a logged-in workstation, then **Type it**. It writes `1:/tmp/hello.txt` line by line with `echo`, runs `encode_phrase` and `say`.
+
+`lpc_encode.py` is a plain LPC-10 analysis (pre-emphasis, autocorrelation, Levinson-Durbin, autocorrelation pitch), with each parameter rounded to the nearest entry in the chip's tables. `--gain` sets the loudness; the default 0.5 avoids clipping the chip's 8-bit output. `--pitch-shift` raises or lowers the voice. The ICON's own `say` produces the same audio as `lpc-render` ✅.
+
 ## QDOS (MS-DOS)
 
 - Pseudo-disks are ordinary QNX files: `.pf` files are 160–360K floppy images, `.ph` files are hard-disk images up to 32 MB.
