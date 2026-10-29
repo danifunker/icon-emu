@@ -7,3 +7,5 @@ target/
 web/pkg/
 web/rom/
 testdata/
+.DS_Store
+._*
