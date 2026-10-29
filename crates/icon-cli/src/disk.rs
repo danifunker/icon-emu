@@ -17,6 +17,8 @@ const USAGE: &str = "icon-cli disk IMAGE [--part N] COMMAND
                                      copy a file or folder into DIR on another (or
                                      the same) image, keeping permissions, owners, dates
   check                              check the filesystem
+  fix-watcom                         fix Watcom Pascal 3.00 programs (wedit, pascal_m) that
+                                     blank the screen on system 4.10 (keeps dates, permissions)
 
 IMAGE is a diskette or hard-disk image; --part picks a hard-disk partition
 (default the first QNX one). Changes are written back to IMAGE. --text converts
@@ -71,7 +73,7 @@ fn run(argv: Vec<String>) -> Result<(), String> {
     let mut img = Disk::hard_auto(raw.clone()).data;
     let padded = img.len() != raw.len();
     let off = files::select(&img, part)?;
-    if padded && matches!(cmd.as_str(), "put" | "mkdir" | "rm") {
+    if padded && matches!(cmd.as_str(), "put" | "mkdir" | "rm" | "fix-watcom") {
         return Err("this image stores padding heads; save a plain copy first (the web page's Download image does), then edit that".into());
     }
     let e = |x: qnx2fs::Error| x.to_string();
@@ -143,6 +145,15 @@ fn run(argv: Vec<String>) -> Result<(), String> {
             let (f, d) = files::remove_tree(&mut vol, &arg(2)?).map_err(e)?;
             println!("deleted {f} files, {d} folders");
             changed = true;
+        }
+        "fix-watcom" => {
+            let fixed = files::fix_watcom(&mut img, off).map_err(e)?;
+            if fixed.is_empty() {
+                println!("nothing to fix: no Watcom program in /util with the 4.10 palette bug");
+            } else {
+                println!("fixed: {}", fixed.join(", "));
+                changed = true;
+            }
         }
         "check" => {
             let r = files::open(&mut img, off).and_then(|mut v| v.check()).map_err(e)?;

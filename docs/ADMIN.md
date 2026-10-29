@@ -199,6 +199,31 @@ Open **Type text into the selected machine** on the web page, paste `hello.paste
 
 `lpc_encode.py` is a plain LPC-10 analysis (pre-emphasis, autocorrelation, Levinson-Durbin, autocorrelation pitch), with each parameter rounded to the nearest entry in the chip's tables. `--gain` sets the loudness; the default 0.5 avoids clipping the chip's 8-bit output. `--pitch-shift` raises or lowers the voice. The ICON's own `say` produces the same audio as `lpc-render`.
 
+## Watcom Pascal and the `wedit` editor
+
+The Watcom Pascal 3.00 diskette (in the YUCoM `Programming` folder) installs with `install_software`. It provides `pascal`, a full-screen Pascal editor and interpreter, and `wedit`, Watcom's general editor, with help in `/util/watcom/wedit/help`.
+
+**Fix them first on system 4.10.** Watcom's 1987 programs show a **blank red screen** on system 4.10. They keep working, but everything is drawn red on red. They read the screen colours from a kernel setting whose format changed between system 4.01 and 4.10, and they set all four colours to red. This happens on real ICONs too, not just in the emulator. The fix changes one byte in each program, works on both 4.01 and 4.10, and keeps the files' permissions and dates:
+- on the web page, open `/util` in **Files**. A notice names the affected programs; click **Fix** (with every machine off, for the hard disk);
+- headless: `icon-cli disk IMAGE fix-watcom`.
+
+**Using `wedit`:** type `wedit FILE`. It's a command-line editor; each file is a "workspace".
+
+| Command | Does |
+|---|---|
+| `i` | input mode: type lines, end with a line holding only `.` |
+| `*` | list the whole file; `3` or `1,5` lists lines |
+| `/word/` | find the next line with "word" (`-/word/` backwards) |
+| `c/old/new/` | change "old" to "new" on the current line (`*c/old/new/` everywhere) |
+| `p` | save, and stay in the editor |
+| `exit` | save and leave; `quit` leaves without saving |
+| `help`, `help change` | list the commands, or explain one (full command names) |
+| `pf 1 text` | make Shift+F1 type "text" (Shift+F1 to F10) |
+| `shell` | open a QNX shell; Ctrl-D comes back |
+| `run` | run the program (with Pascal) |
+
+In input mode, a cursor or function key switches to screen editing, and the **Scrn/Cmd** key (F9) switches back. In `pascal`, the bottom line shows the function keys (F10 is Help).
+
 ## QDOS (MS-DOS)
 
 - Pseudo-disks are ordinary QNX files: `.pf` files are 160–360K floppy images, `.ph` files are hard-disk images up to 32 MB.

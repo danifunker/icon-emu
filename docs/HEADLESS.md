@@ -85,7 +85,10 @@ icon-cli disk IMAGE [--part N] mkdir PATH
 icon-cli disk IMAGE [--part N] rm PATH
 icon-cli disk IMAGE [--part N] check
 icon-cli disk IMAGE [--part N] cp PATH TO_IMAGE DIR [--to-part N] [--replace]
+icon-cli disk IMAGE [--part N] fix-watcom
 ```
+
+`fix-watcom` patches Watcom Pascal 3.00's `wedit` and `pascal_m`, which show a blank screen on system 4.10 (see the administrator notes).
 
 `cp` copies between two images (or within one), keeping permissions, owners and dates. `get` gives the saved file the ICON file's date.
 

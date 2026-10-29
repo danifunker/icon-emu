@@ -142,6 +142,66 @@ pub fn copy(
     to.copy_from(&mut from, src_path, dst_dir, replace)
 }
 
+// ---- Watcom 3.00 on system 4.10
+//
+// Watcom's 1987 programs for the ICON (the editor `wedit` and the Pascal
+// runtime `pascal_m`, from the Pascal 3.00 diskette) save the screen palette
+// at start-up from the kernel's word at sys:0x6C and set it again. In the
+// 640-pixel mode they take colour registers 0-1 from the low nibble and 2-3
+// from the high nibble of the word's *low byte*: right for the 4.01 kernel,
+// which keeps NVRAM's palette word there as it is (F4F4), wrong for 4.10,
+// which stores one nibble per register (FF44). On a 4.10 system every
+// register becomes 4 and the screen is red on red. Taking registers 2-3 from
+// the high nibble of the *high byte* (`mov ah,bh` for `mov ah,bl`) is right
+// for both kernels.
+
+/// The 640-pixel palette routine: regs 0,1 <- bl & 0F; regs 2,3 <- (bl|bh) & F0.
+fn watcom_palette_routine(data: &[u8]) -> Option<(usize, bool)> {
+    const HEAD: [u8; 7] = [0x8A, 0xE3, 0x80, 0xE4, 0x0F, 0x2A, 0xC0];
+    data.windows(21).enumerate().find_map(|(i, w)| {
+        let shape = w[..7] == HEAD
+            && w[7] == 0xE8
+            && w[10..12] == [0xFE, 0xC0]
+            && w[12] == 0xE8
+            && w[15] == 0x8A
+            && w[17..20] == [0x80, 0xE4, 0xF0];
+        match (shape, w[16]) {
+            (true, 0xE3) => Some((i + 16, false)),
+            (true, 0xE7) => Some((i + 16, true)),
+            _ => None,
+        }
+    })
+}
+
+/// Programs in `/util` with Watcom's palette bug, not yet fixed.
+pub fn watcom_unfixed(image: &mut Vec<u8>, offset: u64) -> qnx2fs::Result<Vec<String>> {
+    let mut vol = open(image, offset)?;
+    let mut out = Vec::new();
+    for e in vol.list("/util").unwrap_or_default() {
+        if !e.is_dir && e.size < 1 << 20 && matches!(watcom_palette_routine(&vol.read_file(&e, usize::MAX)?), Some((_, false))) {
+            out.push(e.path);
+        }
+    }
+    Ok(out)
+}
+
+/// Fix Watcom's palette bug in every program in `/util` that has it, keeping
+/// each file's permissions, owner and date. Returns the paths it changed.
+pub fn fix_watcom(image: &mut Vec<u8>, offset: u64) -> qnx2fs::Result<Vec<String>> {
+    let paths = watcom_unfixed(image, offset)?;
+    let mut vol = open(image, offset)?;
+    for path in &paths {
+        let e = vol.lookup(path)?;
+        let mut data = vol.read_file(&e, usize::MAX)?;
+        if let Some((at, false)) = watcom_palette_routine(&data) {
+            data[at] = 0xE7; // mov ah,bh
+            let keep = qnx2fs::NewEntry { mtime: e.modified(), ..qnx2fs::NewEntry::like(&e) };
+            vol.replace(path, &data, &keep)?;
+        }
+    }
+    Ok(paths)
+}
+
 /// Files and folders inside the folder at `path` (not counting it).
 pub fn count_tree<D: std::io::Read + std::io::Seek>(vol: &mut Volume<D>, path: &str) -> qnx2fs::Result<(usize, usize)> {
     let (mut files, mut dirs) = (0, 0);
@@ -238,6 +298,35 @@ mod tests {
         assert!(vol.lookup("/a").is_err());
         assert!(vol.free_blocks() > free);
         assert!(remove_tree(&mut vol, "/").is_err());
+        assert!(vol.check().unwrap().is_clean());
+    }
+
+    #[test]
+    fn watcom_palette_bug_is_found_fixed_once_and_dates_kept() {
+        // wedit's 640-pixel palette routine, with calls to a setter at +0x15.
+        let routine = [
+            0x8A, 0xE3, 0x80, 0xE4, 0x0F, 0x2A, 0xC0, 0xE8, 0x19, 0x00, 0xFE, 0xC0, 0xE8, 0x14, 0x00, 0x8A, 0xE3, 0x80,
+            0xE4, 0xF0, 0xD0, 0xEC,
+        ];
+        let mut prog = vec![0x90u8; 64];
+        prog.extend_from_slice(&routine);
+        assert_eq!(watcom_palette_routine(&prog), Some((64 + 16, false)));
+        let mut img = Disk::formatted_floppy_640k();
+        {
+            let mut vol = open(&mut img, 0).unwrap();
+            vol.set_clock(560_000_000); // 1987
+            vol.mkdir("/util", &NewEntry::default()).unwrap();
+            vol.put("/util/wedit", &prog, &NewEntry { mode: Some(0o555), ..Default::default() }).unwrap();
+            vol.put("/util/other", b"not watcom", &NewEntry::default()).unwrap();
+        }
+        let before = open(&mut img, 0).unwrap().lookup("/util/wedit").unwrap();
+        assert_eq!(watcom_unfixed(&mut img, 0).unwrap(), ["/util/wedit"]);
+        assert_eq!(fix_watcom(&mut img, 0).unwrap(), ["/util/wedit"]);
+        assert!(fix_watcom(&mut img, 0).unwrap().is_empty());
+        let mut vol = open(&mut img, 0).unwrap();
+        let after = vol.lookup("/util/wedit").unwrap();
+        assert_eq!(after.attributes(), before.attributes());
+        assert_eq!(vol.get("/util/wedit").unwrap()[64 + 16], 0xE7);
         assert!(vol.check().unwrap().is_clean());
     }
 

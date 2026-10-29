@@ -1,7 +1,7 @@
 import init, {
   Network, blank_hard_disk_10mb, blank_floppy_640k,
   disk_volumes, disk_view, disk_read, disk_put, disk_mkdir, disk_remove, disk_count, disk_copy, qnx_name, normalize_hard_disk,
-  text_open, text_save,
+  text_open, text_save, watcom_unfixed, fix_watcom,
 } from "./pkg/icon_web.js";
 
 const FS = 0;
@@ -788,7 +788,21 @@ function frefresh() {
     });
   }
   if (fl.sel) fselect(fl.sel);
+  // Watcom Pascal 3.00 (1987) blanks the screen on system 4.10: offer the one-byte fix.
+  const broken = fl.path === "/util" ? JSON.parse(watcom_unfixed(fimage(fl.src), fl.src.offset)) : [];
+  $("files-notice").hidden = broken.length === 0;
+  if (broken.length) {
+    $("fn-text").textContent = `${broken.map((p) => p.split("/").pop()).join(" and ")} (Watcom Pascal 3.00, 1987) ${broken.length === 1 ? "shows" : "show"} a blank red screen on ICON system 4.10, whose kernel stores the screen colours differently. Fix changes one byte, keeping permissions and dates.`;
+  }
 }
+$("fn-fix").addEventListener("click", () => {
+  try {
+    const before = JSON.parse(watcom_unfixed(fimage(fl.src), fl.src.offset));
+    fedit((img) => fix_watcom(img, fl.src.offset));
+    frefresh();
+    fstatus(`Fixed ${before.join(", ")}: the screen will show again.`);
+  } catch (e) { fstatus(e.message, true); }
+});
 function fdownload(name) {
   try {
     const data = disk_read(fimage(fl.src), fl.src.offset, fjoin(fl.path, name), $("files-text").checked);

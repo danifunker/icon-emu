@@ -211,6 +211,21 @@ pub fn disk_copy(src: &[u8], src_offset: f64, src_path: &str, dst: Vec<u8>, dst_
     Ok(img)
 }
 
+/// Programs in /util with the Watcom 3.00 palette bug (blank screen on 4.10), as JSON.
+#[wasm_bindgen]
+pub fn watcom_unfixed(image: &[u8], offset: f64) -> String {
+    let list = files::watcom_unfixed(&mut image.to_vec(), offset as u64).unwrap_or_default();
+    format!("[{}]", list.iter().map(|p| json_str(p)).collect::<Vec<_>>().join(","))
+}
+
+/// Fix them (see `icon_core::files::fix_watcom`); returns the changed image.
+#[wasm_bindgen]
+pub fn fix_watcom(image: Vec<u8>, offset: f64) -> Result<Vec<u8>, JsError> {
+    let mut img = image;
+    files::fix_watcom(&mut img, offset as u64).map_err(js_err)?;
+    Ok(img)
+}
+
 /// How many files and folders are inside a folder, as JSON `{"files", "folders"}`.
 #[wasm_bindgen]
 pub fn disk_count(image: &[u8], offset: f64, path: &str) -> Result<String, JsError> {

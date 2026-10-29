@@ -117,6 +117,7 @@
   .fm-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--fm-line); background: #fbfcfd; }
   .fm-gap { flex: 1; }
   .fm-copybar { background: #eef4ff; }
+  .fm-notice { background: #fff4d6; }
   .fm-copybar input:not([type]) { font: 13px ui-monospace, Menlo, Consolas, monospace; padding: 3px 6px; border: 1px solid var(--fm-line); border-radius: 5px; width: 16em; }
   .fm-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-family: ui-monospace, Menlo, Consolas, monospace; }
   .fm-crumbs a { color: var(--fm-accent); cursor: pointer; padding: 2px 4px; border-radius: 4px; }
@@ -286,6 +287,10 @@
         <button id="files-copy" title="Copy the selected file or folder to another disk or folder, keeping its permissions and dates" disabled>Copy to&hellip;</button>
         <button id="files-refresh" title="Read the disk again">&#8635;</button>
         <button id="files-edit" aria-pressed="false" title="Show Edit and Delete for each entry">Edit</button>
+      </div>
+      <div id="files-notice" class="fm-toolbar fm-notice" hidden>
+        <span id="fn-text"></span>
+        <button id="fn-fix" class="fm-primary">Fix</button>
       </div>
       <div id="files-copybar" class="fm-toolbar fm-copybar" hidden>
         <span>Copy <b id="cp-name"></b> to</span>
