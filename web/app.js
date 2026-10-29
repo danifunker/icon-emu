@@ -1,6 +1,6 @@
 import init, {
   Network, blank_hard_disk_10mb, blank_floppy_640k,
-  disk_volumes, disk_view, disk_read, disk_put, disk_mkdir, disk_remove, disk_count, qnx_name, normalize_hard_disk,
+  disk_volumes, disk_view, disk_read, disk_put, disk_mkdir, disk_remove, disk_count, disk_copy, qnx_name, normalize_hard_disk,
   text_open, text_save,
 } from "./pkg/icon_web.js";
 
@@ -605,8 +605,9 @@ function readOnlyReason(src = fl.src) {
   return "";
 }
 // Apply a change to the selected disk: `edit(image) -> new image`.
-function fedit(edit) {
-  const src = fl.src;
+function fedit(edit) { fedit_on(fl.src, edit); }
+// The same for any disk in the menu.
+function fedit_on(src, edit) {
   const why = readOnlyReason(src);
   if (why) throw new Error(why);
   const data = edit(fimage(src));
@@ -652,6 +653,7 @@ function fselect(name) {
   for (const tr of $("files-table").rows) tr.classList.toggle("sel", tr.dataset.name === name);
   const e = fl.entries && fl.entries.find((x) => x.name === name);
   $("files-download").disabled = !e || e.dir;
+  $("files-copy").disabled = !e;
 }
 function fgo(path) {
   // Show the folder you go to: open it and every folder above it.
@@ -679,6 +681,7 @@ function frefresh() {
   $("files-path").replaceChildren();
   $("files-empty").hidden = true;
   $("files-download").disabled = true;
+  $("files-copy").disabled = true;
   $("files-up").disabled = !fl.src || fl.path === "/";
   $("files-save-img").disabled = $("files-close-img").disabled = !fl.src || fl.src.kind !== "img";
   if (fl.src && fl.src.offset < 0) {
@@ -931,6 +934,47 @@ $("files-src").addEventListener("change", (e) => {
 });
 $("files-up").addEventListener("click", () => fgo(fl.path.replace(/\/[^/]*$/, "") || "/"));
 $("files-download").addEventListener("click", () => { if (fl.sel) fdownload(fl.sel); });
+
+// Copy to…: the selected entry into a folder on any disk in the menu,
+// keeping permissions, owners and dates (the qnx2fs crate does the copy).
+let copying = null; // { src, path, name, dir }
+$("files-copy").addEventListener("click", () => {
+  const e = fl.entries && fl.entries.find((x) => x.name === fl.sel);
+  if (!e) return;
+  copying = { src: fl.src, path: fjoin(fl.path, e.name), name: e.name, dir: e.dir };
+  $("cp-name").textContent = copying.path + (e.dir ? "/" : "");
+  const targets = fsources().filter((s) => s.offset >= 0);
+  $("cp-disk").replaceChildren(...targets.map((s) => new Option(s.label, skey(s), false, skey(s) === skey(fl.src))));
+  $("cp-dir").value = fl.path;
+  $("cp-replace").checked = false;
+  $("files-copybar").hidden = false;
+  $("cp-dir").focus();
+});
+$("cp-disk").addEventListener("change", () => {
+  if (copying) $("cp-dir").value = $("cp-disk").value === skey(copying.src) ? fl.path : "/";
+});
+$("cp-cancel").addEventListener("click", () => { copying = null; $("files-copybar").hidden = true; });
+$("cp-go").addEventListener("click", () => {
+  if (!copying) return;
+  const dst = fsources().find((s) => skey(s) === $("cp-disk").value);
+  if (!dst) { fstatus("That disk isn't there any more.", true); return; }
+  const dir = "/" + $("cp-dir").value.split("/").filter(Boolean).join("/");
+  try {
+    const srcImage = fimage(copying.src);
+    let what = copying.name;
+    if (copying.dir) {
+      const n = JSON.parse(disk_count(srcImage, copying.src.offset, copying.path));
+      what = `${copying.name} (${n.files} file${n.files === 1 ? "" : "s"}, ${n.folders} folder${n.folders === 1 ? "" : "s"} inside)`;
+    }
+    fedit_on(dst, (img) => disk_copy(srcImage, copying.src.offset, copying.path, img, dst.offset, dir, $("cp-replace").checked, localTime()));
+    $("files-copybar").hidden = true;
+    copying = null;
+    frefresh();
+    fstatus(`Copied ${what} to ${dst.label}: ${dir}, with its permissions and dates.`);
+  } catch (err) {
+    fstatus(err.message.startsWith("already exists") ? `${err.message}. Tick "replace files that exist" to overwrite.` : err.message, true);
+  }
+});
 $("files-mkdir").addEventListener("click", () => {
   if (!fl.src) return;
   const why = readOnlyReason();

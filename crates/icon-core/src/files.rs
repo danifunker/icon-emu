@@ -109,15 +109,37 @@ pub fn write_file(
 ) -> qnx2fs::Result<qnx2fs::Entry> {
     let mut vol = open(image, offset)?;
     vol.set_clock(now);
-    if replace {
-        if let Ok(e) = vol.lookup(path) {
-            if !e.is_dir {
-                vol.remove(path)?;
-            }
-        }
-    }
     let body = if text { host_text_to_icon(data)? } else { data.to_vec() };
-    vol.put(path, &body, &qnx2fs::NewEntry::default())
+    if replace {
+        // A file already there keeps its permissions and owner.
+        vol.replace(path, &body, &qnx2fs::NewEntry::default())
+    } else {
+        vol.put(path, &body, &qnx2fs::NewEntry::default())
+    }
+}
+
+/// Copy the file or folder at `src_path` (volume `src_offset` of `src`) into
+/// the folder `dst_dir` of volume `dst_offset` in `dst`, keeping permissions,
+/// owners and dates. `src` and `dst` may be the same disk's bytes: the source
+/// is read from its own snapshot.
+#[allow(clippy::too_many_arguments)]
+pub fn copy(
+    src: &[u8],
+    src_offset: u64,
+    src_path: &str,
+    dst: &mut Vec<u8>,
+    dst_offset: u64,
+    dst_dir: &str,
+    replace: bool,
+    now: i64,
+) -> qnx2fs::Result<qnx2fs::CopyReport> {
+    let mut from = Volume::open(Cursor::new(src.to_vec()), src_offset)?;
+    let mut to = open(dst, dst_offset)?;
+    to.set_clock(now);
+    let dst_dir = if dst_dir.is_empty() { "/" } else { dst_dir };
+    // The source is its own snapshot, so even a folder copied into itself
+    // is copied once, as it was.
+    to.copy_from(&mut from, src_path, dst_dir, replace)
 }
 
 /// Files and folders inside the folder at `path` (not counting it).

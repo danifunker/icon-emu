@@ -13,11 +13,23 @@ const USAGE: &str = "icon-cli disk IMAGE [--part N] COMMAND
   put HOSTFILE PATH [--text] [--replace]   copy a file onto the image
   mkdir PATH                         make a folder
   rm PATH                            delete a file, or a folder with everything in it
+  cp PATH TO_IMAGE DIR [--to-part N] [--replace]
+                                     copy a file or folder into DIR on another (or
+                                     the same) image, keeping permissions, owners, dates
   check                              check the filesystem
 
 IMAGE is a diskette or hard-disk image; --part picks a hard-disk partition
 (default the first QNX one). Changes are written back to IMAGE. --text converts
 text: UTF-8 with LF line ends here, RS line ends and the ICON's accents there.";
+
+/// An ICON date (local wall-clock seconds) as a host time, in this machine's time zone.
+fn local_to_system_time(t: i64) -> Option<std::time::SystemTime> {
+    use chrono::{Local, TimeZone};
+    let naive = chrono::DateTime::from_timestamp(t, 0)?.naive_utc();
+    let local = Local.from_local_datetime(&naive).earliest()?;
+    let secs = u64::try_from(local.timestamp()).ok()?;
+    Some(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs))
+}
 
 fn now() -> i64 {
     icon_time(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0))
@@ -34,10 +46,12 @@ fn run(argv: Vec<String>) -> Result<(), String> {
     let flags: Vec<&str> = argv.iter().map(String::as_str).filter(|a| a.starts_with("--")).collect();
     let mut pos: Vec<String> = Vec::new();
     let mut part = 0usize;
+    let mut to_part = 0usize;
     let mut it = argv.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--part" => part = it.next().and_then(|n| n.parse().ok()).ok_or("--part needs a number")?,
+            "--to-part" => to_part = it.next().and_then(|n| n.parse().ok()).ok_or("--to-part needs a number")?,
             "-h" | "--help" => {
                 println!("{USAGE}");
                 return Ok(());
@@ -81,10 +95,34 @@ fn run(argv: Vec<String>) -> Result<(), String> {
             std::io::stdout().write_all(&data).map_err(|x| x.to_string())?;
         }
         "get" => {
-            let data = files::read_file(&mut img, off, &arg(2)?, text).map_err(e)?;
+            let src = arg(2)?;
+            let data = files::read_file(&mut img, off, &src, text).map_err(e)?;
             let out = arg(3)?;
             std::fs::write(&out, &data).map_err(|x| format!("{out}: {x}"))?;
+            // Give the copy the ICON file's date. The ICON kept local time, so
+            // read it as local time here.
+            let when = files::open(&mut img, off).and_then(|mut v| v.lookup(&src)).ok().and_then(|x| x.modified());
+            if let Some(t) = when.and_then(local_to_system_time) {
+                let _ = std::fs::File::options().write(true).open(&out).and_then(|f| f.set_modified(t));
+            }
             println!("{} bytes to {out}", data.len());
+        }
+        "cp" => {
+            // Into another image (or this one), written back to that image.
+            let to_path = arg(3)?;
+            let dir = arg(4)?;
+            let same = std::fs::canonicalize(&to_path).ok() == std::fs::canonicalize(&path).ok();
+            let to_raw = if same { raw.clone() } else { std::fs::read(&to_path).map_err(|x| format!("{to_path}: {x}"))? };
+            let mut to = Disk::hard_auto(to_raw.clone()).data;
+            if to.len() != to_raw.len() {
+                return Err(format!("{to_path} stores padding heads; save a plain copy first, then copy into that"));
+            }
+            let to_off = files::select(&to, to_part)?;
+            let r = files::copy(&img, off, &arg(2)?, &mut to, to_off, &dir, replace, now()).map_err(e)?;
+            println!("copied {} files, {} folders", r.files, r.dirs);
+            let tmp = format!("{to_path}.tmp");
+            std::fs::write(&tmp, &to).map_err(|x| format!("{tmp}: {x}"))?;
+            std::fs::rename(&tmp, &to_path).map_err(|x| format!("{to_path}: {x}"))?;
         }
         "put" => {
             let src = arg(2)?;

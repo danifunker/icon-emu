@@ -61,6 +61,7 @@ These copy files between your computer and the ICON's disks directly, without ty
 | `get DISK PATH HOSTFILE [--text]` | Copy a file to your computer |
 | `put DISK HOSTFILE PATH [--text] [--replace]` | Copy a file onto the disk |
 | `mkdir DISK PATH`, `rm DISK PATH` | Make a folder; delete a file, or a folder with everything in it |
+| `cp DISK PATH TODISK DIR [--replace]` | Copy a file or folder into `DIR` on a disk, keeping permissions, owners and dates (e.g. `cp fd /util hd /util`) |
 
 - `DISK` is `fd` (the diskette), `hd` (the hard disk's first partition), or `hd2` / `hd3` (its other partitions on a 64 MB disk).
 - **Reading** works while the machine runs. It sees the disk as QNX has written it so far; something QNX still holds in memory may not be there yet.
@@ -83,7 +84,10 @@ icon-cli disk IMAGE [--part N] put HOSTFILE PATH [--text] [--replace]
 icon-cli disk IMAGE [--part N] mkdir PATH
 icon-cli disk IMAGE [--part N] rm PATH
 icon-cli disk IMAGE [--part N] check
+icon-cli disk IMAGE [--part N] cp PATH TO_IMAGE DIR [--to-part N] [--replace]
 ```
+
+`cp` copies between two images (or within one), keeping permissions, owners and dates. `get` gives the saved file the ICON file's date.
 
 `--part` picks a hard-disk partition (default the first). `cat` prints a text file decoded (accents, line ends). `check` checks the filesystem and exits with 1 if it finds errors. It is handy in CI to prepare a disk before `icon-cli serve --hd`, or to inspect one afterwards.
 

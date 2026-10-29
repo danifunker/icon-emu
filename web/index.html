@@ -116,6 +116,8 @@
   .fm-title button, .fm-title .fm-btn { padding: 3px 9px; }
   .fm-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--fm-line); background: #fbfcfd; }
   .fm-gap { flex: 1; }
+  .fm-copybar { background: #eef4ff; }
+  .fm-copybar input:not([type]) { font: 13px ui-monospace, Menlo, Consolas, monospace; padding: 3px 6px; border: 1px solid var(--fm-line); border-radius: 5px; width: 16em; }
   .fm-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-family: ui-monospace, Menlo, Consolas, monospace; }
   .fm-crumbs a { color: var(--fm-accent); cursor: pointer; padding: 2px 4px; border-radius: 4px; }
   .fm-crumbs a:hover { background: var(--fm-hover); }
@@ -281,8 +283,17 @@
         <button id="files-download" title="Download the selected file to this computer" disabled>Download</button>
         <label class="fm-btn" title="Copy files from this computer into this folder"><input id="files-upload" type="file" multiple hidden>Upload&hellip;</label>
         <button id="files-mkdir" title="Make a folder here">New folder</button>
+        <button id="files-copy" title="Copy the selected file or folder to another disk or folder, keeping its permissions and dates" disabled>Copy to&hellip;</button>
         <button id="files-refresh" title="Read the disk again">&#8635;</button>
         <button id="files-edit" aria-pressed="false" title="Show Edit and Delete for each entry">Edit</button>
+      </div>
+      <div id="files-copybar" class="fm-toolbar fm-copybar" hidden>
+        <span>Copy <b id="cp-name"></b> to</span>
+        <select id="cp-disk"></select>
+        <label>folder <input id="cp-dir" value="/" spellcheck="false"></label>
+        <label><input id="cp-replace" type="checkbox"> replace files that exist</label>
+        <button id="cp-go" class="fm-primary">Copy</button>
+        <button id="cp-cancel">Cancel</button>
       </div>
       <div class="fm-body">
         <nav id="files-tree" class="fm-tree" aria-label="Folders"></nav>

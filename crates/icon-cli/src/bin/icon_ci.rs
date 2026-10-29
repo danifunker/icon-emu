@@ -30,6 +30,8 @@
 //!   get DISK PATH HOSTFILE [--text]
 //!   put DISK HOSTFILE PATH [--text] [--replace]
 //!   mkdir DISK PATH | rm DISK PATH
+//!   cp DISK PATH TODISK DIR [--replace]   copy a file or folder into DIR, keeping
+//!                                  permissions, owners and dates
 //!   script FILE [--keep-going]     run icon-ci commands, one per line (# comments)
 //!   quit
 //!
@@ -120,7 +122,7 @@ fn exec(sock: &mut UnixStream, reader: &mut BufReader<UnixStream>, words: &[Stri
         "screen" | "transcript" => (w(0), json!({"slot": num(1, 0)})),
         "screenshot" => ("screenshot".into(), json!({"slot": num(1, 0), "path": w(2)})),
         "hd-save" | "floppy-save" => (w(0), json!({"path": w(1)})),
-        "ls" | "get" | "put" | "mkdir" | "rm" => {
+        "ls" | "get" | "put" | "mkdir" | "rm" | "cp" => {
             let flags: Vec<&String> = words.iter().filter(|x| x.starts_with("--")).collect();
             let pos: Vec<&String> = words.iter().filter(|x| !x.starts_with("--")).collect();
             for f in &flags {
@@ -131,13 +133,15 @@ fn exec(sock: &mut UnixStream, reader: &mut BufReader<UnixStream>, words: &[Stri
             let p = |i: usize| pos.get(i).map(|x| x.to_string()).ok_or_else(|| format!("{}: missing argument (icon-ci --help)", w(0)));
             // The server runs elsewhere: hand it absolute host paths.
             let host = |x: String| std::path::absolute(&x).map(|p| p.display().to_string()).unwrap_or(x);
-            let disk = p(1)?;
-            let (dname, part) = match disk.as_str() {
-                "fd" => ("fd", 0),
-                "hd" => ("hd", 0),
-                d if d.starts_with("hd") => ("hd", d[2..].parse::<u64>().map_err(|_| format!("bad disk {d:?}"))?),
-                d => return Err(format!("unknown disk {d:?} (fd, hd, hd2, hd3)")),
+            let parse_disk = |d: &str| -> Result<(&'static str, u64), String> {
+                match d {
+                    "fd" => Ok(("fd", 0)),
+                    "hd" => Ok(("hd", 0)),
+                    d if d.starts_with("hd") => Ok(("hd", d[2..].parse::<u64>().map_err(|_| format!("bad disk {d:?}"))?)),
+                    d => Err(format!("unknown disk {d:?} (fd, hd, hd2, hd3)")),
+                }
             };
+            let (dname, part) = parse_disk(&p(1)?)?;
             let base = json!({"disk": dname, "part": part, "text": flags.iter().any(|f| *f == "--text"), "replace": flags.iter().any(|f| *f == "--replace")});
             let with = |extra: Value| {
                 let mut v = base.clone();
@@ -149,6 +153,14 @@ fn exec(sock: &mut UnixStream, reader: &mut BufReader<UnixStream>, words: &[Stri
                 "get" => ("file-get".into(), with(json!({"path": p(2)?, "out": host(p(3)?)}))),
                 "put" => ("file-put".into(), with(json!({"src": host(p(2)?), "path": p(3)?}))),
                 "mkdir" => ("file-mkdir".into(), with(json!({"path": p(2)?}))),
+                "cp" => {
+                    // cp FROMDISK PATH TODISK DIR: the target is the disk the rules apply to.
+                    let (tname, tpart) = parse_disk(&p(3)?)?;
+                    let mut v = with(json!({"from_disk": dname, "from_part": part, "path": p(2)?, "dir": p(4)?}));
+                    v["disk"] = json!(tname);
+                    v["part"] = json!(tpart);
+                    ("file-cp".into(), v)
+                }
                 _ => ("file-rm".into(), with(json!({"path": p(2)?}))),
             }
         }

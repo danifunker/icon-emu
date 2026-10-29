@@ -39,7 +39,7 @@ QNX 2 has no `/home`. Paths name a node and a drive:
 Open **Files** below the machines on the web page. It shows the files on the diskette or the hard disk, and copies them to and from your computer directly.
 
 1. Pick **Diskette** or **Hard disk** in the menu. Click a folder to open it, **Up** to go back.
-2. **Download** copies a file to your computer. **Upload…** copies files from your computer into the folder you're in. **New folder** makes a folder.
+2. **Download** copies a file to your computer. **Upload…** copies files from your computer into the folder you're in. **New folder** makes a folder. **Copy to…** copies a file or folder to another disk or folder, keeping its permissions, owner and dates, so programs stay runnable (for example Logo from the Logo diskette image to the hard disk).
 3. Click **Edit** to edit or delete. Each file gets **Edit**, which opens it in a text editor on the page, and **Delete**. Deleting a folder deletes everything in it; the page first says how many files and folders that is. Click **Done editing** when you're finished.
 4. Keep **convert text** ticked. ICON text differs from ordinary text in three ways, and the panel converts all of them, both ways:
    - lines end with an RS character (0x1E) instead of a newline;
@@ -54,7 +54,8 @@ Rules:
 - **The diskette** can be changed at any time. The page takes it out, makes the change and puts it back, like swapping diskettes by hand. Don't do it while the ICON is writing to the diskette.
 - **The hard disk** can only be changed while **every machine is off**. The fileserver keeps parts of the disk in memory and would write over the change, and a running workstation may be using it. While anything is on, the panel and the editor are read-only, showing the disk as last saved.
 - **Names** must fit QNX: up to 16 letters, digits, `_`, `.` or `$`. Other characters become `_`, and long names are shortened. The panel says when it renames something.
-- Files you upload or save are dated with the emulated ICON clock: today's date in 1991, as files the ICON writes itself.
+- Files you upload or save are dated with the emulated ICON clock: today's date in 1991, as files the ICON writes itself. Files you **copy** between disks keep their original dates.
+- A new file uploaded from your computer gets QNX's default permissions, which don't include "execute". If it is a program, mark it runnable on the ICON with `chattr 1:/path/name a=+e pg=+e po=+e`, or copy it from an ICON disk with **Copy to…** instead. Replacing an existing file keeps that file's permissions.
 
 To give a student a file, upload it straight into their home folder on the hard disk (`/user/<login>`) with every machine off. Or put it on a diskette and have them `copy [1]2:/name name`.
 

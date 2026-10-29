@@ -344,6 +344,18 @@ impl Server {
                 let e = self.edit(a, |img, off| files::write_file(img, off, &path, &data, text, replace, now))?;
                 Ok(json!({"path": e.path, "bytes": e.size}))
             }
+            "file-cp" => {
+                // From any disk (read as it is now) into a folder on any disk
+                // (written under the usual rules), keeping metadata.
+                let from = json!({"disk": a["from_disk"], "part": a["from_part"]});
+                let (src, src_off) = self.volume(&from)?;
+                let path = s("path")?;
+                let dir = s("dir")?;
+                let replace = a["replace"].as_bool().unwrap_or(false);
+                let now = icon_core::devices::rtc::icon_time(now_secs());
+                let r = self.edit(a, |img, off| files::copy(&src, src_off, &path, img, off, &dir, replace, now))?;
+                Ok(json!({"files": r.files, "folders": r.dirs}))
+            }
             "file-mkdir" => {
                 let path = s("path")?;
                 let now = icon_core::devices::rtc::icon_time(now_secs());

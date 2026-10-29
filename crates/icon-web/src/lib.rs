@@ -199,6 +199,18 @@ pub fn disk_remove(image: Vec<u8>, offset: f64, path: &str, now: f64) -> Result<
     Ok(img)
 }
 
+/// Copy a file or folder from one disk (or volume) into a folder on another,
+/// or the same, keeping permissions, owners and dates. Returns the changed
+/// target image.
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn disk_copy(src: &[u8], src_offset: f64, src_path: &str, dst: Vec<u8>, dst_offset: f64, dst_dir: &str, replace: bool, now: f64) -> Result<Vec<u8>, JsError> {
+    let mut img = dst;
+    let now = icon_core::devices::rtc::icon_time(now as i64);
+    files::copy(src, src_offset as u64, src_path, &mut img, dst_offset as u64, dst_dir, replace, now).map_err(js_err)?;
+    Ok(img)
+}
+
 /// How many files and folders are inside a folder, as JSON `{"files", "folders"}`.
 #[wasm_bindgen]
 pub fn disk_count(image: &[u8], offset: f64, path: &str) -> Result<String, JsError> {

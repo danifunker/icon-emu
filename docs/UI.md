@@ -94,6 +94,8 @@ It looks and works like a file manager, in its own light window:
 - The **path** above the list (*hard disk / help / editor*) is clickable, and **↑ Up** goes up one folder.
 - In the **list**, click to select, double-click a folder to open it, and double-click a file to download it. Icons tell folders, text files and other files apart.
 - **Download** saves the selected file to your computer. **Upload…** copies files from your computer into the open folder. **New folder** makes one. **↻** reads the disk again.
+- **Copy to…** copies the selected file or folder (with everything in it) to a folder on any disk in the menu: the diskette, the hard disk, an opened image, or another folder on the same disk. Permissions, owners and dates are kept exactly, so a copied program still runs. Tick **replace files that exist** to overwrite. The usual rules apply to the disk you copy to.
+- Uploading over a file, or saving it in the editor, keeps its permissions and owner.
 - The status bar shows the number of items and the free space, and says when the disk is read-only.
 - **Edit** switches on editing. Each file then also gets **Edit** (open it in the text editor) and **Delete**. Deleting a folder deletes everything in it, after telling you how many files and folders that is. **Done editing** switches back.
 - **convert text** (leave it ticked) turns the ICON's text into ordinary text on your computer and back: line endings, French accents, and code page 437 characters. Binary files are never converted.
