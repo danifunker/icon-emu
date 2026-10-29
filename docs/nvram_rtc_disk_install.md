@@ -8,7 +8,7 @@ Closes or advances: FW-4 (NVRAM map), HW-4 (`machine_test` codes), FS-7 and FS-8
 
 ## 0. How the evidence was obtained (reproducible)
 
-Paths below are relative to `scratchpad/`. Work files are in `scratchpad/re/` (`bin/` holds the copied binaries, `x/` holds the split, decompressed and disassembled outputs, `tools/` holds the scripts).
+Names such as `re/x/t9c.asm` refer to the author's working disassembly files, which are not part of this repository.
 
 * **QNX 2 load-file format (CONFIRMED, every `/cmds`, `/sys` and `/util` binary):**
   * 14-byte header: `u8 01`, `u8 flags` (`0x80` = large model, multi-record), `u16 code_size`, `u16 data_size (incl. bss)`, `u16 init_data_end`, `u16 0`, `u16 stack (0x3E8)`, `u16 0`.

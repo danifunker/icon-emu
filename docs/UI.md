@@ -1,59 +1,89 @@
-# Web UI Plan
+# Using the web page
 
-The goal is a browser page showing **two separate machines side by side, linked by an ICONET coax cable**: an **ICON workstation** and a **LEXICON fileserver**. Each runs its own emulated 80186 board in the same WebAssembly module, and the two are joined by an emulated ARCNET segment. This follows the style of Alan's [Hyperion emulator](https://github.com/alanswx/Hyperion), where the machine itself is drawn in HTML/CSS, but the drawings match the ICON hardware. Reference photos are in `icon_icon2_research/web_archive/_hardware_photos/`.
+The page shows one ICON network: a **LEXICON fileserver** on the left, and one or more **ICON workstations** joined to it by the network cable (ICONET). Each machine is a separate emulated computer.
 
-## The machines
+Everything you load stays in your browser. Nothing is uploaded.
 
-### LEXICON fileserver (built first: it's what the install needs)
-- A low box with these features:
-  - **5¼" floppy drive** with a turn-down latch and an activity LED;
-  - **red hard-disk LED**;
-  - **yellow trouble LED** (it blinks the self-test codes, driven by I/O FA88);
-  - **power switch with lamp**.
-- **Console monitor:** an optional small CRT. The real LEXICON drives its video only during boot, for troubleshooting. Show it in a collapsible panel.
-- **Power button** (cold boot) and a **reset** (front-panel or keyboard reset).
-- **Floppy controls:**
-  - pick a bundled release diskette, or **Load .img**;
-  - eject;
-  - a write-protect toggle;
-  - drag-and-drop a file onto the drive to mount it.
-- **Hard disk controls:**
-  - **New hard disk**: creates a blank, unformatted 10 MB (306/4/17) or 64 MB drive. Formatting and installing happen inside the emulated OS (`configure` / `dinit`), as they did for real;
-  - **Load .img**;
-  - **Download .img**: saves the current disk to your computer;
-  - **Autosave** to browser storage, so the disk survives a page reload.
+## Boot ROM
 
-### ICON workstation (added once the fileserver boots)
-- The pedestal unit, with:
-  - the **CRT** (amber or colour) on top;
-  - a **built-in keyboard** with a **trackball**, and the CUR LOCK / CAP LOCK lights;
-  - the **amber power toggle** on the pedestal;
-  - the volume knob and headphone jack (speech output later).
-- **Power button** and **RESET** (the ICON's RESET + CTRL + SHIFT combination).
-- Keyboard input goes to whichever machine has focus. The trackball maps to the mouse (pointer lock while the screen is clicked).
-- A diskless station needs no disk controls. An optional "solo ICON" mode later adds the pedestal floppy.
+Every machine needs the ICON boot ROM before it can be switched on. At the top of the page:
 
-### Between them
-- A drawn **coax cable** with BNC terminators. Its activity flickers when packets pass.
-- Per-machine **NVRAM** settings (node ID, boot server, boot options), editable in a settings drawer. These replace the real `attach_net` factory setup.
+1. Click **Load ROM…**.
+2. Pick the 32 KB ROM image, or select **both** 16 KB EPROM files at once (5053-1 and 5053-2).
 
-## How saving works in a browser
+The page names the ROM when it recognises it:
+- **stock 5053 ISS 2** is the original ROM.
+- **Rel 2.11** is the later ROM. Workstations with it need system software **4.10.05** on the fileserver (see [the rebuild guide](REBUILD.md), section 3).
 
-The emulator keeps each disk image in memory as a byte array. To persist it:
-1. **Autosave:** the page writes changed disk images to the browser's private storage (the Origin Private File System, or IndexedDB) every few seconds and when the page is hidden. On reload, the last disk comes back automatically. This storage belongs to this site in this browser only.
-2. **Download .img:** creates a file from the in-memory image (a `Blob` download), so you can keep it, share it, or open it with RustyBackup. That's how you'd take a freshly installed fileserver disk away.
-3. **Load .img:** picks a file from your computer and replaces the disk, e.g. to restore a download or start from a supplied image.
+The ROM is remembered for next time. **Forget** removes it.
 
-NVRAM contents (16 words per machine) are saved the same way, since `attach_net` and `configure` write to them.
+To give the fileserver and the workstations different ROMs, untick **Use the same ROM for all devices**. A ROM row then appears for each kind of machine.
 
-Later, we'll ship ready-made starting images (an installed 4.10.01 fileserver disk) as bundled downloads.
+## Memory
 
-## Build order
+**Memory** sets how much memory each machine has the next time it is switched on:
+- **512 KB** is the standard ICON.
+- **1 MB** adds the CEMCORP "1 MEG ICON UPGRADE BOARD". It only works with the **Rel 2.11** ROM. With the original ROM a 1 MB workstation stops before `Login:`. The note next to the menu warns you when the loaded ROM doesn't fit.
 
-| Phase | UI deliverable |
+## Switching machines on and off
+
+- **Power** switches a machine on or off. Switch the fileserver on first and wait for `Login:`, then the workstations.
+- Workstations boot from the fileserver over the network. They become nodes 16, 17, 18 and so on.
+- **Add ICON node** adds another workstation. **Remove last** removes the last one, once it is switched off.
+
+The lights:
+- **power**: the machine is on.
+- **disk** and **floppy** (fileserver): the hard disk or the diskette drive is being used.
+- **trouble**: blinks error codes during the self-test.
+
+The small line under each machine's name shows its state ("off", or its node number when running).
+
+## Keyboard and trackball
+
+- **Click a machine** to type on it. Its frame lights up.
+- **Click its screen** to capture the mouse as well. Moving the mouse moves the trackball, and the two buttons are the two ACTION keys. Press **Ctrl+Alt** to let go (Esc also works).
+
+Keys that differ from a PC keyboard:
+
+| ICON key | Press |
 |---|---|
-| 1 | None. A headless CLI runs the ROM self-test |
-| 2 | The fileserver panel: power, console screen, floppy drive, new/load/download hard disk, autosave |
-| 3 | The second machine (ICON workstation) and the coax link. The workstation network-boots to `Login:` |
-| 4 | Keyboard and trackball input, for logging in and driving `configure` |
-| 5 | Full install, then boot from the hard disk. Ship a starting image |
+| ACTION (left / right) | F11 / F12, or the mouse buttons while captured |
+| HELP | Insert |
+| RUBOUT | Delete |
+| CURSOR LOCK | Scroll Lock |
+| CLR | Home |
+
+**Type text into the selected machine** (below the machines) types pasted lines for you, one at a time, each followed by Enter. Use it for long commands. Click the machine to type into first.
+
+## Diskettes
+
+The fileserver has the network's only diskette drive.
+
+| Button | What it does |
+|---|---|
+| **Insert…** | Put a diskette image (`.img`) in the drive |
+| **New blank** | Put in an empty 640K diskette, already formatted for the ICON, ready to copy files onto |
+| **Eject** | Take the diskette out |
+| **Download .img** | Save the diskette to your computer, with everything written to it. After an eject, it saves the diskette you just took out |
+
+When the fileserver has started from its hard disk, the diskette is **drive 2** (`2:` on the fileserver, `[1]2:` from a workstation). [The administrator notes](ADMIN.md#moving-files-in-and-out-with-diskettes) explain how to copy files to and from it.
+
+If a diskette is in the drive when the fileserver is switched on, the fileserver tries to start from it. A system boot diskette makes it start from the diskette; a blank or data diskette is skipped and it starts from the hard disk.
+
+## Hard disk
+
+| Button | What it does |
+|---|---|
+| **New 10 MB** | An empty 10 MB drive. `configure` formats it during the install |
+| **New 64 MB** | An empty 64 MB drive, prepared as the factory shipped it (two 32 MB volumes) |
+| **Load .img…** | Use a hard-disk image from your computer |
+| **Download .img** | Save the hard disk to your computer |
+
+The hard disk is saved in your browser every few seconds and when the fileserver is switched off, so it survives reloading the page. Download a copy after each important step anyway; browser storage can be cleared.
+
+A new or loaded hard disk is used from the next time the fileserver is switched on.
+
+## Sound and version
+
+- **sound** (top right) turns the speaker and speech on or off.
+- Next to it, **build** shows the date and code version of the emulator you are running. Mention it when you report a problem.

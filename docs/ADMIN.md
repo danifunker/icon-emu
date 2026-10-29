@@ -1,8 +1,8 @@
 # Running an ICON network: administrator notes
 
-These notes cover running ICON system software 4.10.01 once it is installed (see [REBUILD.md](REBUILD.md)). The default administrator is **`root` / `superuser`**.
+These notes cover running ICON system software 4.10 once it is installed (see [the rebuild guide](REBUILD.md)). The administrator's login is **`root`**, password **`superuser`**.
 
-Items marked ✅ were confirmed in the emulator. Items marked ⚠ come from the manuals and haven't been tried yet.
+Items marked ⚠ come from the manuals and haven't been tried in the emulator yet. Everything else has.
 
 ## Paths and drives
 
@@ -32,11 +32,42 @@ QNX 2 has no `/home`. Paths name a node and a drive:
 | `/dos` | QDOS pseudo-disks: `MSDOS.pf` (MS-DOS 3.2 boot), `work.ph` (student work disk) |
 | `/sys`, `/boot` | System tasks and network boot images |
 
+## Moving files in and out with diskettes
+
+The fileserver's diskette drive is the way to get files between the ICON and your own computer. Diskettes are image files (`.img`) on your computer.
+
+**Copying files off the ICON:**
+
+1. Under the fileserver, click **New blank**. This inserts an empty 640K diskette that is already formatted.
+2. Copy files onto it. From a workstation the diskette is `[1]2:`. Give the copy a file name, not just the drive:
+   ```
+   copy 1:/user/alice/story [1]2:/story
+   files [1]2:/
+   ```
+3. Click the diskette's **Download .img** to save it to your computer.
+4. Read it with [RustyBackup](https://github.com/danifunker/rusty-backup)'s `rb-cli`:
+   ```
+   rb-cli ls blank-640k.img /
+   rb-cli get --rs-to-lf blank-640k.img /story story.txt
+   ```
+   `--rs-to-lf` converts the line endings. QNX 2 ends each line with an RS character (0x1E) where other systems use a newline.
+
+**Copying files onto the ICON:**
+- **From an ICON diskette image** (for example one dumped from a real ICON): click **Insert…**, then `copy [1]2:/name 1:/user/alice/name`.
+- **Short text files:** paste the text into **Type text into the selected machine**, one `echo` line per line of text:
+  ```
+  echo first line >1:/user/alice/notes
+  echo second line >>1:/user/alice/notes
+  ```
+- **Any file from your computer:** this needs a tool that writes QNX 2 diskettes. RustyBackup reads them but can't write them yet.
+
+To prepare a blank diskette yourself instead of using **New blank**, insert any empty 640K image and run `dinit 2` on the fileserver. Press Enter when it asks you to place the disk in the drive.
+
 ## User accounts
 
-**Once after install,** run `verify_net` ✅. Without it, `new_user` rejects every cluster ID with "Invalid cluster id". If it asks about switched-off workstations, answer **n**.
+**Once after install,** run `verify_net`. Without it, `new_user` rejects every cluster ID with "Invalid cluster id". If it asks about switched-off workstations, answer **n**.
 
-**Add a user** with `new_user` ✅. The prompts:
+**Add a user** with `new_user`. The prompts:
 
 | Prompt | Usual answer |
 |---|---|
@@ -71,21 +102,21 @@ echo logoff >>1:/user/alice/.login     (append; or use: edit 1:/user/alice/.logi
 cat 1:/user/alice/.login
 ```
 
-`echo … >` is confirmed ✅. `>>` and the House-then-logoff behaviour are not yet ⚠.
+`echo … >` and `>>` work. Logging off when House exits hasn't been tried yet ⚠.
 
 House has its own QNX shell window, so this keeps students out of the prompt *after* House but not inside it. Setting `/util/house` as the entry program in `new_user` avoids the shell altogether ⚠.
 
 ## User interfaces
 
 - **The shell:** the `$` prompt. This is the default.
-- **House** (`house`, which is `/util/house` running `/sys/ui`) ✅: the doors-and-notebooks desktop from system software 3.00 onwards. Rooms and doors are directories, notebooks are files. It's built on the Cemcorp Window Manager.
+- **House** (`house`, which is `/util/house` running `/sys/ui`): the doors-and-notebooks desktop from system software 3.00 onwards. Rooms and doors are directories, notebooks are files. It's built on the Cemcorp Window Manager.
 - **ICON_LOOK** is the later graphical login and desktop (about 1991). 4.10.01's `sys.init` supports it, but the package is **not** in the YorkU set.
 - **Full-screen programs** you can launch from either: `edit`, `logo` (and the French version), the languages, and `qdos` (MS-DOS).
 
 ## Network
 
 - The fileserver is always **node 1**. Workstations boot from it over ICONET as nodes 16, 17, …
-- `/config/net.config` lists the nodes. `verify_net` checks it against the network and fills in the hardware database ✅.
+- `/config/net.config` lists the nodes. `verify_net` checks it against the network and fills in the hardware database.
 - If the network hangs, the fileserver may have run out of virtual circuits. `kill_vcs`, or reboot the fileserver and then every workstation ⚠.
 
 ## Turning it off
@@ -100,14 +131,14 @@ Power on in reverse order: the fileserver first, then the workstations once it s
 
 After an unclean stop, run `chkfsys 1` (and `chkfsys 3` on a 64 MB disk). It should end with "Rebuilt bitmap agrees with existing bitmap".
 
-In the browser, the hard disk is saved to browser storage every 5 seconds and again when the fileserver powers off. **Download .img** makes a copy you can keep.
+In the browser, the hard disk is saved to browser storage every 5 seconds and again when the fileserver is switched off. **Download .img** makes a copy you can keep.
 
 ## Speech
 
-ICON workstations have a TI TMS5220C speech chip; the emulator plays it through the page's sound. Fileservers have none. The Speech Administrator (`/sys/speech`) starts automatically on a workstation ✅.
+ICON workstations have a TI TMS5220C speech chip; the emulator plays it through the page's sound. Fileservers have none. The Speech Administrator (`/sys/speech`) starts automatically on a workstation.
 
-- `say FILE …` speaks phrase files ✅.
-- **The phrase file format** is a series of 12-byte frames: energy, pitch, k1–k10, each a parameter index (energy 0–15, where 15 is a stop frame; pitch 0–63, where 0 is unvoiced). `decode_phrase <FILE` lists a file as one frame per line, and `encode_phrase <TEXT >FILE` turns such a listing back into a file ✅. `convert_phrase` converts old TMS5220 "codepack" bitstreams.
+- `say FILE …` speaks phrase files.
+- **The phrase file format** is a series of 12-byte frames: energy, pitch, k1–k10, each a parameter index (energy 0–15, where 15 is a stop frame; pitch 0–63, where 0 is unvoiced). `decode_phrase <FILE` lists a file as one frame per line, and `encode_phrase <TEXT >FILE` turns such a listing back into a file. `convert_phrase` converts old TMS5220 "codepack" bitstreams.
 - **No phrase files ship with 4.10.01** or anywhere in the YorkU disk set. To try speech, make one:
 
 ```
@@ -120,7 +151,7 @@ say 1:/tmp/a.sp
 
 Those two frames are the voiced sound the boot ROM's speech self-test plays. Each frame lasts 25 ms.
 
-**Making real words** from a recording, on your own computer (needs Python with numpy, and sox):
+**Making real words** from a recording. This runs on your own computer, in a copy of the emulator's source code, and needs Python with numpy, and sox:
 
 ```
 say -v Daniel -o hello.aiff hello            # any recording works; macOS's say is handy
@@ -132,7 +163,7 @@ python3 scripts/lpc_encode.py hello.wav --paste hello > hello.paste.txt
 
 Open **Type text into the selected machine** on the web page, paste `hello.paste.txt`, click a logged-in workstation, then **Type it**. It writes `1:/tmp/hello.txt` line by line with `echo`, runs `encode_phrase` and `say`.
 
-`lpc_encode.py` is a plain LPC-10 analysis (pre-emphasis, autocorrelation, Levinson-Durbin, autocorrelation pitch), with each parameter rounded to the nearest entry in the chip's tables. `--gain` sets the loudness; the default 0.5 avoids clipping the chip's 8-bit output. `--pitch-shift` raises or lowers the voice. The ICON's own `say` produces the same audio as `lpc-render` ✅.
+`lpc_encode.py` is a plain LPC-10 analysis (pre-emphasis, autocorrelation, Levinson-Durbin, autocorrelation pitch), with each parameter rounded to the nearest entry in the chip's tables. `--gain` sets the loudness; the default 0.5 avoids clipping the chip's 8-bit output. `--pitch-shift` raises or lowers the voice. The ICON's own `say` produces the same audio as `lpc-render`.
 
 ## QDOS (MS-DOS)
 

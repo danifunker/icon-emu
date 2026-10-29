@@ -1,7 +1,7 @@
 # ICON (80186) keyboard, trackball and display: reverse-engineering notes
 
 Status: working notes for the Rust/WASM emulator. Every claim carries **[C]** (CONFIRMED: read directly from code or data) or **[I]** (INFERRED). "Manual" means the Developer's Toolkit Vol 2, Appendix D (`txt/...Developer's Toolkit Operations Guide Volume 2...txt`, lines ~10617–10970).
-All relative paths (`re/`, `tools/`, `disks/`, `txt/`) are under the session scratchpad `/private/tmp/claude-501/-Users-dani-repos-icon-icon2-research/070eb9df-879d-4f22-a9ce-20d79298baf5/scratchpad/`.
+Names such as `re/kern.asm` refer to the author's working disassembly files, which are not part of this repository.
 
 
 ## 0. Sources and how to reproduce
