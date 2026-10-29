@@ -253,9 +253,17 @@ impl Wd1002 {
         self.irq = true;
     }
 
+    /// The cylinder to address. For the floppy, QNX sets bit 8 of the
+    /// cylinder register when it reads a 40-track (360K) disk in the 80-track
+    /// drive, so the board can double-step; the image is indexed by the
+    /// disk's own track number, so the flag is dropped.
+    fn cylinder(&self) -> u16 {
+        if self.drive() == 3 { self.cyl & 0xFF } else { self.cyl }
+    }
+
     fn location(&self) -> Option<usize> {
         let disk = self.drives[self.drive()].as_ref()?;
-        disk.offset(self.cyl, self.head(), self.sector)
+        disk.offset(self.cylinder(), self.head(), self.sector)
     }
 
     fn load_sector(&mut self) -> bool {
@@ -297,11 +305,11 @@ impl Wd1002 {
         let d = self.drive();
         if self.xfer == Xfer::Format {
             // Fill every sector of the addressed track.
-            let head = self.head();
+            let (head, cyl) = (self.head(), self.cylinder());
             if let Some(disk) = self.drives[d].as_mut() {
                 let fill = if disk.first_sector == 1 { 0xE5 } else { 0x00 };
                 for s in 0..disk.sectors {
-                    if let Some(o) = disk.offset(self.cyl, head, s + disk.first_sector) {
+                    if let Some(o) = disk.offset(cyl, head, s + disk.first_sector) {
                         disk.data[o..o + 512].fill(fill);
                         disk.dirty = true;
                     }
