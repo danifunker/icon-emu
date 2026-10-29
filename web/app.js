@@ -403,7 +403,11 @@ window.addEventListener("resize", layoutBus);
 // machine kind ("Use the same ROM for all devices"), or each kind gets its own.
 // The 32 KB image is the two 16 KB EPROMs interleaved: 5053-1 holds the even
 // bytes, 5053-2 the odd.
-const STOCK_ROM_SHA1 = "5d7f7b173f599edf1f0e8655852c3adafa61fd89"; // 5053-1/-2 ISS 2
+// Known dumps, by SHA-1 of the 32 KB interleaved image.
+const KNOWN_ROMS = {
+  "5d7f7b173f599edf1f0e8655852c3adafa61fd89": "stock 5053 ISS 2",
+  "3750cf6f203fe1a167b853e36d30114701b039eb": "Rel 2.11 (200-503/504-000)",
+};
 const roms = { shared: null }; // { name, data, builtin? } per kind, plus "shared"
 let sameRom = local.get("icon-emu.same-rom") !== "0";
 const romRows = { shared: $("rom-shared") };
@@ -421,7 +425,7 @@ async function sha1(data) {
 function effectiveRom(kind) { return sameRom ? roms.shared : roms[kind] || roms.shared; }
 async function describe(r) {
   let tag = "";
-  try { tag = (await sha1(r.data)) === STOCK_ROM_SHA1 ? " · stock 5053 ISS 2" : " · custom"; } catch {}
+  try { tag = " · " + (KNOWN_ROMS[await sha1(r.data)] || "custom"); } catch {}
   return r.name + tag;
 }
 async function showRoms(note) {

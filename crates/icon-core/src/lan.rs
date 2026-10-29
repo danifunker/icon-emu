@@ -87,6 +87,13 @@ impl Lan {
                 continue;
             }
             let sid = packet[0];
+            if std::env::var_os("ICON_NET_LOG").is_some() {
+                // Short packets: data from offset packet[2] to 256; long: packet[3] (packet[2] = 0) to 512.
+                let (start, end) = if packet[2] != 0 { (packet[2] as usize, 256) } else { (packet[3] as usize, 512) };
+                let d = &packet[start..end];
+                let hex: String = d.iter().take(24).map(|b| format!("{b:02x}")).collect();
+                eprintln!("NET t={:.3}s {sid:>3} -> {did:>3} len {:>3}: {hex}", now as f64 / crate::machine::CPU_HZ as f64, d.len());
+            }
             if did == 0 {
                 for (j, m) in self.nodes.iter_mut().enumerate() {
                     if let Some(m) = m.as_mut().filter(|_| j != i) {

@@ -158,7 +158,8 @@ impl Nvram {
 
 /// Known-good NVRAM images, reconstructed from the 4.x kernel's NVRAM
 /// routines (docs/nvram_rtc_disk_install.md §1.5). Word 0 bits: 12-15 loader
-/// disables (net, floppy, hd, rom), 11 ?, 8 no speech, 7 no keyboard,
+/// disables (net, floppy, hd, rom), 11 0 = 1 MB board, 10 (Rel 2.11 ROM)
+/// network RAM decoded by the mid-range chip selects, 8 no speech, 7 no keyboard,
 /// 5 no RTC, 3 no 1797 FDC, 2 workstation, 0-1 extra 128 KB banks.
 /// Words 1-4 serial number, 5-9 CRTC R0-R9, 10 node/boot server,
 /// 11 palette, 12 boot-file selector, 13 monitor, 14-15 unused.
@@ -172,9 +173,12 @@ pub mod presets {
     }
 
     /// ICON workstation, node 16, boots from server 1 over the network, 512 KB.
+    /// Bit 10 of word 0 is set: the 5053 ROM and the 4.x kernels ignore it,
+    /// and the Rel 2.11 ROM's network loader needs it to find the COM9026's
+    /// RAM at D8000.
     pub fn workstation() -> [u16; 16] {
         [
-            0xE82E, 0x5173, 0x3C02, 0x5173, 0x3C02, 0x2838, 0x442C, 0x0041,
+            0xEC2E, 0x5173, 0x3C02, 0x5173, 0x3C02, 0x2838, 0x442C, 0x0041,
             0x3D3C, 0x0300, 0x1001, 0xF4F4, 0x0001, 0xFFFF, 0xFFFF, 0xFFFF,
         ]
     }

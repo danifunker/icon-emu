@@ -516,7 +516,11 @@ fn run_script(fs: Machine, args: &Args, path: &str) {
                     } else {
                         let mut w = new_ws();
             w.int5c_log = Some(Vec::new());
-            w.board.watch = Some((0x74A, 0x74B));
+            // Debug: ICON_WATCH=lo-hi (hex) logs the workstation's writes to that range.
+            w.board.watch = std::env::var("ICON_WATCH").ok().and_then(|v| {
+                let (lo, hi) = v.split_once('-')?;
+                Some((u32::from_str_radix(lo, 16).ok()?, u32::from_str_radix(hi, 16).ok()?))
+            });
             lan.power_on(1, w);
                     }
                 }

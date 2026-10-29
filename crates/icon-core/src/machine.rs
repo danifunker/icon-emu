@@ -93,6 +93,7 @@ pub struct Board {
     pub watch_log: Vec<(u64, u32, u8)>,
     /// Cached RAM address of the running kernel's console font table.
     font_at: std::cell::Cell<Option<usize>>,
+    rom_font_at: std::cell::Cell<Option<usize>>,
     /// Address of the instruction being executed (set by `Machine::step`).
     pub cur_pc: u32,
     pub watch_pcs: Vec<u32>,
@@ -151,6 +152,7 @@ impl Machine {
             watch_log: Vec::new(),
             cur_pc: 0,
             font_at: std::cell::Cell::new(None),
+            rom_font_at: std::cell::Cell::new(None),
             watch_pcs: Vec::new(),
             speaker: false,
             speaker_edges: Vec::new(),
@@ -192,6 +194,10 @@ impl Machine {
             let base = ((r.es as usize) << 4) + r.bx as usize;
             self.boot_params = (0..0x40).map(|i| self.board.ram.get(base + i).copied().unwrap_or(0xFF)).collect();
             self.boot_entry = Some(r);
+            // Debug: RAM as the ROM hands over to the loaded image.
+            if let Some(path) = std::env::var_os("ICON_DUMP_AT_ENTRY") {
+                let _ = std::fs::write(format!("{}.{:02x}", path.to_string_lossy(), self.board.arcnet.node_id), &self.board.ram);
+            }
         }
         self.board.cycles += c as u64;
         self.board.arcnet.tick(self.board.cycles);
@@ -396,8 +402,8 @@ impl Board {
     /// 0x2CF4. Glyph bytes are bottom row first, LSB = leftmost pixel.
     /// Inverse cells (the cursor) decode too; unknown cells become '?'.
     pub fn screen_text(&self) -> String {
-        const ROM_FONT: usize = 0x2CF4;
-        let rom_glyph = |c: u8| &self.rom[ROM_FONT + (c - 0x20) as usize * 10..][..10];
+        let rom_font = self.rom_font();
+        let rom_glyph = |c: u8| &self.rom[rom_font + (c - 0x20) as usize * 10..][..10];
         let kernel = self.kernel_font();
         // Glyph c from the font table starting at `table` (bottom row first),
         // returned top row first.
@@ -429,6 +435,10 @@ impl Board {
                     t10.insert(g, c as char);
                 }
             }
+            // A blank cell is a space in either polarity (Rel 2.11 leaves the
+            // screen inverted), whatever unused glyphs the table also has.
+            t9.insert([0; 9], ' ');
+            t9.insert([0xFF; 9], ' ');
             (t10, t9)
         };
         // The kernel's table comes first; the ROM font is the fallback, since
@@ -505,13 +515,26 @@ impl Board {
         out
     }
 
+    /// Offset of the boot ROM's 8x10 font (characters 20h-7Eh, 10 bytes each,
+    /// bottom row first): 2CF4h in 5053 ISS 2, 301Ah in Rel 2.11. Found by
+    /// its 'H' glyph and cached.
+    fn rom_font(&self) -> usize {
+        const H: [u8; 10] = [0x00, 0x00, 0x44, 0x44, 0x44, 0x7C, 0x44, 0x44, 0x44, 0x00];
+        if let Some(f) = self.rom_font_at.get() {
+            return f;
+        }
+        let f = self.rom.windows(10).position(|w| w == H).and_then(|p| p.checked_sub((b'H' - 0x20) as usize * 10)).unwrap_or(0x2CF4);
+        self.rom_font_at.set(Some(f));
+        f
+    }
+
     /// Locate the kernel's console font: a table of 10-byte glyphs indexed
     /// from character 0 in which most capital letters match the ROM font
     /// (kernels differ in a few glyphs, so no single letter is trusted). The
     /// address is cached and re-checked cheaply on later calls.
     fn kernel_font(&self) -> Option<usize> {
-        const ROM_FONT: usize = 0x2CF4;
-        let rom_glyph = |c: u8| &self.rom[ROM_FONT + (c - 0x20) as usize * 10..][..10];
+        let rom_font = self.rom_font();
+        let rom_glyph = |c: u8| &self.rom[rom_font + (c - 0x20) as usize * 10..][..10];
         let score = |base: usize| -> usize {
             (b'A'..=b'Z')
                 .filter(|&c| self.ram.get(base + c as usize * 10..base + c as usize * 10 + 10) == Some(rom_glyph(c)))
