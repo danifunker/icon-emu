@@ -5,6 +5,11 @@ name: Pages
 on:
   push:
     branches: [main]
+    # Documentation-only pushes don't change the site.
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - ".gitignore"
   workflow_dispatch:
 
 permissions:
