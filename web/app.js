@@ -12,22 +12,30 @@ let net = null;
 let focus = FS;
 let floppy = null;   // { name, data }
 let hardDisk = null; // { name, data }, kept across power cycles
-let rom = null;      // { name, data }
+
+// ---- Machine kinds. Each kind has its own boot ROM (unless one ROM is shared).
+// `node: true` kinds can be added as workstations; ICON2 and ICON3 go here once
+// they are emulated.
+const KINDS = {
+  lexicon: { label: "LEXICON", title: "LEXICON fileserver" },
+  icon: { label: "ICON", title: "ICON workstation", node: true },
+};
 
 // ---- Machines: slot 0 is the fileserver, built into the page; workstations
 // are cloned from a template. Each entry holds that machine's elements.
 const machines = [{
-  root: $("m0"), canvas: $("screen0"), status: $("status0"), pwr: $("pwr0"),
+  kind: "lexicon", root: $("m0"), canvas: $("screen0"), status: $("status0"), pwr: $("pwr0"),
   trouble: $("trouble0"), power: $("power0"),
 }];
-function addMachine(slot) {
+function addMachine(slot, kind) {
   const root = $("ws-template").content.firstElementChild.cloneNode(true);
   root.dataset.slot = slot;
-  root.querySelector(".ws-title").textContent = `ICON workstation ${slot} · node ${15 + slot}`;
+  root.querySelector(".ws-title").textContent = `${KINDS[kind].title} ${slot} · node ${15 + slot}`;
   $("workstations").append(root);
   machines[slot] = {
-    root, canvas: root.querySelector("canvas"), status: root.querySelector(".status"),
+    kind, root, canvas: root.querySelector("canvas"), status: root.querySelector(".status"),
     pwr: root.querySelector(".pwr"), trouble: root.querySelector(".trouble"), power: root.querySelector(".power"),
+    tap: root.querySelector(".tap"), drop: root.querySelector(".drop"),
   };
   setupMachine(slot);
 }
@@ -37,9 +45,15 @@ function setupMachine(slot) {
   m.ctx.fillRect(0, 0, 640, 240);
   m.image = m.ctx.createImageData(640, 240);
   m.locks = {};
+  m.activity = 0;
   m.root.addEventListener("mousedown", () => setFocus(slot));
   m.power.addEventListener("click", (e) => { e.stopPropagation(); power(slot); });
-  m.canvas.addEventListener("click", () => { if (net && net.is_on(slot)) m.canvas.requestPointerLock(); });
+  // Capture notices sit over the screen.
+  m.notice = document.createElement("div");
+  m.notice.className = "notice";
+  m.notice.hidden = true;
+  m.canvas.parentElement.append(m.notice);
+  m.canvas.addEventListener("click", () => capture(slot));
 }
 function slotOf(el) { return machines.findIndex((m) => m && m.canvas === el); }
 
@@ -77,8 +91,17 @@ const held = new Map(); // key -> slot it was pressed on
 
 function send(slot, code) { if (net && net.is_on(slot)) net.key(slot, code); }
 
+function releaseAll() { for (const [k, s] of held) send(s, k | 0x80); held.clear(); }
+
 function keyEvent(e, down) {
   if (!net || e.metaKey || e.target.tagName === "INPUT") return;
+  // Ctrl+Alt releases a captured keyboard and mouse.
+  if (down && document.pointerLockElement && e.ctrlKey && e.altKey) {
+    e.preventDefault();
+    releaseAll();
+    document.exitPointerLock();
+    return;
+  }
   const slot = focus;
   if (e.code in LOCKS) {
     e.preventDefault();
@@ -107,10 +130,55 @@ function keyEvent(e, down) {
 }
 window.addEventListener("keydown", (e) => keyEvent(e, true));
 window.addEventListener("keyup", (e) => keyEvent(e, false));
-window.addEventListener("blur", () => { for (const [k, s] of held) send(s, k | 0x80); held.clear(); });
+window.addEventListener("blur", releaseAll);
 setInterval(() => { for (const s of new Set(held.values())) send(s, 0x7f); }, 50); // repeat ticks
 
-// ---- Trackball: click a screen to capture the mouse (Esc releases it)
+// ---- Capture: clicking a running machine's screen captures the mouse (as its
+// trackball) and gives it the keyboard. The first time, a notice explains this
+// before anything is captured; afterwards a short reminder shows instead.
+// Ctrl+Alt releases; browsers also always release pointer lock on Esc.
+const RELEASE_HINT = "Press <b>Ctrl+Alt</b> to release (Esc also works).";
+function showNotice(m, html, buttons = [], ms = 0) {
+  clearTimeout(m.noticeTimer);
+  m.notice.innerHTML = html;
+  m.notice.classList.toggle("toast", buttons.length === 0);
+  for (const [label, action, secondary] of buttons) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    if (secondary) b.className = "secondary";
+    b.addEventListener("click", (e) => { e.stopPropagation(); action(); });
+    m.notice.append(b);
+  }
+  m.notice.hidden = false;
+  if (ms) m.noticeTimer = setTimeout(() => { m.notice.hidden = true; }, ms);
+}
+function capture(slot) {
+  const m = machines[slot];
+  if (!net || !net.is_on(slot) || document.pointerLockElement === m.canvas) return;
+  setFocus(slot);
+  if (local.get("icon-emu.capture-explained")) { m.canvas.requestPointerLock(); return; }
+  showNotice(m,
+    `<div><b>Capture keyboard and mouse?</b></div>
+     <div>Your keystrokes go to this machine, the mouse moves its trackball, and the mouse buttons are its two ACTION keys.</div>
+     <div>${RELEASE_HINT}</div>`,
+    [["Capture", () => {
+      local.set("icon-emu.capture-explained", "1");
+      m.notice.hidden = true;
+      m.canvas.requestPointerLock();
+    }], ["Not now", () => { m.notice.hidden = true; }, true]]);
+}
+document.addEventListener("pointerlockchange", () => {
+  const locked = document.pointerLockElement;
+  machines.forEach((m) => {
+    const on = m.canvas === locked;
+    m.root.classList.toggle("captured", on);
+    if (on) showNotice(m, `Keyboard and mouse captured. ${RELEASE_HINT}`, [], 3000);
+    else if (m.notice.classList.contains("toast")) m.notice.hidden = true;
+  });
+  if (!locked) releaseAll();
+});
+
+// ---- Trackball (while captured)
 let tbAcc = [0, 0];
 document.addEventListener("mousemove", (e) => {
   const locked = document.pointerLockElement;
@@ -269,7 +337,7 @@ $("eject").addEventListener("click", () => {
 // ---- Power
 function localTime() { return Date.now() / 1000 - new Date().getTimezoneOffset() * 60; }
 function power(slot) {
-  if (!net) { alert("Load the boot ROM first (top of the page)."); return; }
+  if (!net) return;
   startAudio();
   const m = machines[slot];
   if (net.is_on(slot)) {
@@ -280,7 +348,12 @@ function power(slot) {
     m.status.textContent = "off";
     return;
   }
-  net.power_on(slot, localTime());
+  try {
+    net.power_on(slot, localTime());
+  } catch {
+    alert(`Load a boot ROM for the ${KINDS[m.kind].label} first (top of the page).`);
+    return;
+  }
   if (slot === FS) {
     if (floppy) net.insert_floppy(floppy.data);
     if (hardDisk) net.attach_hard_disk(hardDisk.data);
@@ -290,83 +363,127 @@ function power(slot) {
   setFocus(slot);
 }
 
-// ---- Workstations: add more nodes, or remove the last one while it is off
-function workstations() { return machines.length - 1; }
-function addWorkstation() {
+// ---- Nodes: add workstations of any emulated kind, or remove the last one while it is off
+function saveNodes() { local.set("icon-emu.nodes", JSON.stringify(machines.slice(1).map((m) => m.kind))); }
+function addNode(kind) {
+  if (!net) return;
   const slot = machines.length;
-  addMachine(slot);
-  if (net && net.slots() <= slot) net.add_workstation();
-  local.set("icon-emu.workstations", String(workstations()));
+  if (net.slots() <= slot) net.add_node(kind);
+  addMachine(slot, kind);
+  saveNodes();
+  layoutBus();
 }
-$("ws-add").addEventListener("click", addWorkstation);
-$("ws-remove").addEventListener("click", () => {
+for (const [kind, k] of Object.entries(KINDS)) {
+  if (!k.node) continue;
+  const b = document.createElement("button");
+  b.textContent = `Add ${k.label} node`;
+  b.addEventListener("click", () => addNode(kind));
+  $("node-remove").before(b);
+}
+$("node-remove").addEventListener("click", () => {
   const slot = machines.length - 1;
-  if (slot <= 1) return;
-  if (net && net.is_on(slot)) { alert(`Power off workstation ${slot} first.`); return; }
-  if (net) net.remove_workstation();
+  if (!net || slot <= 1) return;
+  if (net.is_on(slot)) { alert(`Power off node ${15 + slot} first.`); return; }
+  net.remove_last_node();
   machines.pop().root.remove();
   if (focus === slot) setFocus(FS);
-  local.set("icon-emu.workstations", String(workstations()));
+  saveNodes();
+  layoutBus();
 });
 
-// ---- Boot ROM: chosen by the viewer and kept in this browser (IndexedDB), so
-// it never has to be published with the page. The 32 KB image is the two
-// 16 KB EPROMs interleaved: 5053-1 holds the even bytes, 5053-2 the odd.
+// The bus trunk runs down to the last row of workstations.
+function layoutBus() {
+  const last = machines[machines.length - 1].root;
+  $("bus").style.setProperty("--trunk", `${Math.max(6, last.offsetTop - 16)}px`);
+}
+window.addEventListener("resize", layoutBus);
+
+// ---- Boot ROMs: chosen by the viewer and kept in this browser (IndexedDB), so
+// they never have to be published with the page. One ROM can serve every
+// machine kind ("Use the same ROM for all devices"), or each kind gets its own.
+// The 32 KB image is the two 16 KB EPROMs interleaved: 5053-1 holds the even
+// bytes, 5053-2 the odd.
 const STOCK_ROM_SHA1 = "5d7f7b173f599edf1f0e8655852c3adafa61fd89"; // 5053-1/-2 ISS 2
+const roms = { shared: null }; // { name, data, builtin? } per kind, plus "shared"
+let sameRom = local.get("icon-emu.same-rom") !== "0";
+const romRows = { shared: $("rom-shared") };
+for (const [kind, k] of Object.entries(KINDS)) {
+  const row = $("rom-row-template").content.firstElementChild.cloneNode(true);
+  row.querySelector(".label").textContent = `${k.label} ROM`;
+  row.hidden = sameRom;
+  $("rom-bar").append(row);
+  romRows[kind] = row;
+}
 async function sha1(data) {
   const h = new Uint8Array(await crypto.subtle.digest("SHA-1", data));
   return Array.from(h, (b) => b.toString(16).padStart(2, "0")).join("");
 }
-async function showRom(note) {
-  const bar = $("rom-bar");
-  bar.classList.toggle("missing", !rom);
-  $("rom-forget").hidden = !rom || rom.builtin;
+function effectiveRom(kind) { return sameRom ? roms.shared : roms[kind] || roms.shared; }
+async function describe(r) {
+  let tag = "";
+  try { tag = (await sha1(r.data)) === STOCK_ROM_SHA1 ? " · stock 5053 ISS 2" : " · custom"; } catch {}
+  return r.name + tag;
+}
+async function showRoms(note) {
+  $("rom-same").checked = sameRom;
   $("rom-note").textContent = note || "";
-  if (!rom) { $("rom-name").textContent = "none loaded. Choose the ICON boot ROM to start."; return; }
-  let kind = "";
-  try { kind = (await sha1(rom.data)) === STOCK_ROM_SHA1 ? " · stock 5053 ISS 2" : " · custom"; } catch {}
-  $("rom-name").textContent = `${rom.name}${kind}`;
-}
-function useRom(r, note) {
-  rom = r;
-  if (!net) {
-    net = new Network(rom.data);
-    while (net.slots() < machines.length) net.add_workstation();
-  } else {
-    net.set_rom(rom.data);
-    if (machines.some((_, i) => net.is_on(i))) note = "takes effect at each machine's next power-on";
+  const missing = Object.keys(KINDS).some((k) => !effectiveRom(k));
+  $("rom-bar").classList.toggle("missing", missing);
+  for (const [key, row] of Object.entries(romRows)) {
+    row.hidden = (key === "shared") !== sameRom;
+    const r = roms[key];
+    row.querySelector(".forget").hidden = !r || r.builtin;
+    row.querySelector(".name").textContent = r ? await describe(r)
+      : key === "shared" ? (sameRom ? "none loaded. Choose the ICON boot ROM to start." : "none")
+      : roms.shared ? `none of its own: using ${roms.shared.name}` : "none loaded";
   }
-  showRom(note);
 }
-$("rom-load").addEventListener("change", async (e) => {
-  const files = [...e.target.files].sort((a, b) => a.name.localeCompare(b.name));
-  e.target.value = "";
-  if (files.length === 0) return;
+// Hand the current ROMs to the emulator; running machines keep theirs until power-off.
+function applyRoms() {
+  let running = false;
+  for (const kind of Object.keys(KINDS)) {
+    const r = effectiveRom(kind);
+    if (r) net.set_rom(kind, r.data);
+    running ||= machines.some((m, i) => m.kind === kind && net.is_on(i));
+  }
+  return running ? "takes effect at each machine's next power-on" : "";
+}
+async function readRomFiles(fileList) {
+  const files = [...fileList].sort((a, b) => a.name.localeCompare(b.name));
+  if (files.length === 0) return null;
   const parts = await Promise.all(files.map(async (f) => new Uint8Array(await f.arrayBuffer())));
-  let data, name;
-  if (parts.length === 1 && parts[0].length === 0x8000) {
-    data = parts[0]; name = files[0].name;
-  } else if (parts.length === 2 && parts.every((p) => p.length === 0x4000)) {
+  if (parts.length === 1 && parts[0].length === 0x8000) return { name: files[0].name, data: parts[0] };
+  if (parts.length === 2 && parts.every((p) => p.length === 0x4000)) {
     // Sorted by name, so "...-1" / "part1" (even bytes) comes first.
-    data = new Uint8Array(0x8000);
+    const data = new Uint8Array(0x8000);
     for (let i = 0; i < 0x4000; i++) { data[2 * i] = parts[0][i]; data[2 * i + 1] = parts[1][i]; }
-    name = `${files[0].name} + ${files[1].name}`;
-  } else {
-    alert("Expected one 32 KB ROM image, or the two 16 KB EPROM dumps (select both at once).");
-    return;
+    return { name: `${files[0].name} + ${files[1].name}`, data };
   }
-  try {
-    useRom({ name, data });
-    await idbPut("rom", { name, data });
-  } catch (err) { alert(err); }
-});
-$("rom-forget").addEventListener("click", async () => {
-  try { await idbPut("rom", null); } catch {}
-  showRom("forgotten: it will be asked for again next time");
+  alert("Expected one 32 KB ROM image, or the two 16 KB EPROM dumps (select both at once).");
+  return null;
+}
+for (const [key, row] of Object.entries(romRows)) {
+  row.querySelector(".load").addEventListener("change", async (e) => {
+    const r = await readRomFiles(e.target.files);
+    e.target.value = "";
+    if (!r) return;
+    roms[key] = r;
+    try { await idbPut("rom:" + key, r); } catch {}
+    showRoms(applyRoms());
+  });
+  row.querySelector(".forget").addEventListener("click", async () => {
+    roms[key] = null;
+    try { await idbPut("rom:" + key, null); } catch {}
+    showRoms("forgotten: it will be asked for again next time");
+  });
+}
+$("rom-same").addEventListener("change", (e) => {
+  sameRom = e.target.checked;
+  local.set("icon-emu.same-rom", sameRom ? "1" : "0");
+  showRoms(applyRoms());
 });
 
 // ---- Main loop
-let lastPackets = 0;
 function frame() {
   requestAnimationFrame(frame);
   if (!net) return;
@@ -375,6 +492,12 @@ function frame() {
   machines.forEach((m, slot) => {
     const on = net.is_on(slot);
     m.pwr.classList.toggle("on", on);
+    // Coax activity: this node sent or received a packet since the last frame.
+    const a = net.activity(slot);
+    const busy = a !== m.activity;
+    m.activity = a;
+    if (m.tap) { m.tap.classList.toggle("busy", busy); m.drop.classList.toggle("busy", busy); }
+    else $("cable").classList.toggle("busy", busy);
     if (!on) return;
     m.image.data.set(net.screen(slot));
     m.ctx.putImageData(m.image, 0, 0);
@@ -386,34 +509,43 @@ function frame() {
     }
     m.status.textContent = net.status(slot);
   });
-  const p = net.packets();
-  $("cable").classList.toggle("busy", p !== lastPackets);
-  $("packets").textContent = `${p} packets`;
-  lastPackets = p;
+  $("packets").textContent = `${net.packets()} packets`;
 }
 
 setupMachine(FS);
-const wanted = Math.max(1, Math.min(8, parseInt(local.get("icon-emu.workstations") || "1", 10) || 1));
-for (let slot = 1; slot <= wanted; slot++) addMachine(slot);
+// Nodes from last time (per browser); the old workstation count still works.
+let kinds = null;
+try { kinds = JSON.parse(local.get("icon-emu.nodes")); } catch {}
+if (!Array.isArray(kinds)) kinds = Array(parseInt(local.get("icon-emu.workstations") || "1", 10) || 1).fill("icon");
+kinds = kinds.filter((k) => KINDS[k]?.node).slice(0, 8);
+if (kinds.length === 0) kinds = ["icon"];
+kinds.forEach((kind, i) => addMachine(i + 1, kind));
 setFocus(FS);
+layoutBus();
 
 await init();
-// The ROM comes from browser storage, else from a local build's rom/ folder
-// (`make web` copies it there; it is never published).
-let saved = null;
-try { saved = await idbGet("rom"); } catch (e) { console.warn("IndexedDB unavailable", e); }
-if (saved && saved.data) {
-  useRom(saved, "restored from browser storage");
-} else {
+net = new Network();
+while (net.slots() < machines.length) net.add_node(machines[net.slots()].kind);
+// ROMs come from browser storage; a shared one can also come from a local
+// build's rom/ folder (`make web` copies it there; it is never published).
+for (const key of ["shared", ...Object.keys(KINDS)]) {
+  try { roms[key] = (await idbGet("rom:" + key)) || null; } catch (e) { console.warn("IndexedDB unavailable", e); break; }
+}
+if (!roms.shared) {
+  try { const old = await idbGet("rom"); if (old?.data) { roms.shared = old; idbPut("rom:shared", old); } } catch {}
+}
+let note = roms.shared ? "restored from browser storage" : "";
+if (!roms.shared) {
   try {
     const res = await fetch("rom/icon1_rom_combined.bin");
     if (res.ok) {
       const data = new Uint8Array(await res.arrayBuffer());
-      if (data.length === 0x8000) useRom({ name: "rom/icon1_rom_combined.bin", data, builtin: true }, "from this build's rom/ folder");
+      if (data.length === 0x8000) { roms.shared = { name: "rom/icon1_rom_combined.bin", data, builtin: true }; note = "from this build's rom/ folder"; }
     }
   } catch {}
-  if (!rom) showRom();
 }
+applyRoms();
+showRoms(note);
 try {
   const savedHd = await idbGet("fileserver-hd");
   if (savedHd) { hardDisk = savedHd; showHd("restored from browser storage"); }

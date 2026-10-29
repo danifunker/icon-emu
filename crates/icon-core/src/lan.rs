@@ -19,16 +19,19 @@ pub struct Lan {
     /// Per node: when its current transmit was first seen.
     tx_seen: Vec<Option<u64>>,
     pub packets: u64,
+    /// Per node: packets it has sent or received (for activity lights).
+    pub activity: Vec<u64>,
 }
 
 impl Lan {
     pub fn new(slots: usize) -> Self {
-        Self { nodes: (0..slots).map(|_| None).collect(), tx_seen: vec![None; slots], packets: 0 }
+        Self { nodes: (0..slots).map(|_| None).collect(), tx_seen: vec![None; slots], packets: 0, activity: vec![0; slots] }
     }
 
     /// Keep internal per-slot state in step after `nodes` grows.
     pub fn grow(&mut self) {
         self.tx_seen.resize(self.nodes.len(), None);
+        self.activity.resize(self.nodes.len(), 0);
     }
 
     pub fn power_on(&mut self, slot: usize, mut m: Machine) {
@@ -89,6 +92,7 @@ impl Lan {
                     if let Some(m) = m.as_mut().filter(|_| j != i) {
                         if m.board.arcnet.rx_ready(true) {
                             m.board.arcnet.deliver(&packet);
+                            self.activity[j] += 1;
                         }
                     }
                 }
@@ -101,6 +105,7 @@ impl Lan {
             match target {
                 Some(j) if self.nodes[j].as_ref().unwrap().board.arcnet.rx_ready(false) => {
                     self.nodes[j].as_mut().unwrap().board.arcnet.deliver(&packet);
+                    self.activity[j] += 1;
                     self.finish(i, true);
                 }
                 Some(_) => {} // NAK: the receiver is busy; retry at the next pass
@@ -115,5 +120,6 @@ impl Lan {
         }
         self.tx_seen[i] = None;
         self.packets += 1;
+        self.activity[i] += 1;
     }
 }

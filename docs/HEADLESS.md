@@ -13,10 +13,11 @@ The boot ROM is not in this repo. `serve` reads `--rom FILE`, and defaults to `~
 ## Start the server
 
 ```
-icon-cli serve [--socket /tmp/icon.sock] [--rom FILE] [--hd IMG] [--floppy IMG] [--workstations N]
+icon-cli serve [--socket /tmp/icon.sock] [--rom FILE] [--fs-rom FILE] [--ws-rom FILE] [--hd IMG] [--floppy IMG] [--workstations N]
 ```
 
 - The socket can also be set with `ICON_CI_SOCKET`. Keep the path short, because Unix socket paths are limited to about 100 bytes.
+- `--rom` is the boot ROM for every machine. `--fs-rom` and `--ws-rom` give the fileserver or the workstations a different one.
 - The server reads `--hd` into memory. Your file is never written unless you send `hd-save`.
 - With no floppy, the fileserver boots from the hard disk. With a floppy, it boots from the floppy, and the hard-disk partitions become drives 2 and 3.
 

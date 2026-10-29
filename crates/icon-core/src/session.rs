@@ -64,6 +64,8 @@ struct Console {
 pub struct Rig {
     pub lan: Lan,
     rom: Vec<u8>,
+    /// A different boot ROM for the workstations (default: the same one).
+    pub workstation_rom: Option<Vec<u8>>,
     consoles: Vec<Console>,
     /// Emulated seconds allowed for a boot / a single command.
     pub boot_timeout: f64,
@@ -84,6 +86,7 @@ impl Rig {
         Ok(Rig {
             lan: Lan::new(slots),
             rom: rom.to_vec(),
+            workstation_rom: None,
             consoles: (0..slots).map(|_| Console::default()).collect(),
             boot_timeout: 180.0,
             command_timeout: 300.0,
@@ -135,7 +138,7 @@ impl Rig {
         let mut nv = presets::workstation();
         nv[10] = (((15 + slot) as u16) << 8) | 1; // own node ID, boot server 1
         let m = Machine::new(Config {
-            rom: self.rom.clone(),
+            rom: self.workstation_rom.clone().unwrap_or_else(|| self.rom.clone()),
             patch_800k_floppy: false,
             ram_kb: 512,
             nvram: nv,

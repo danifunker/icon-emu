@@ -8,7 +8,7 @@
   :root {
     --bg: #1c1d20; --text: #e9e6df; --muted: #9c988f;
     --beige: #d9d2c0; --beige-dark: #b9b19c; --beige-edge: #a39b86;
-    --amber: #f2a33a; --yellow: #ffd23f; --red: #ff4a3a; --green: #5fe05f;
+    --amber: #f2a33a; --coax: #5a5850; --yellow: #ffd23f; --red: #ff4a3a; --green: #5fe05f;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
@@ -17,7 +17,7 @@
   h1 { font-size: 19px; font-weight: 650; margin: 0; letter-spacing: .02em; }
   .sub { color: var(--muted); }
   .net { display: grid; grid-template-columns: minmax(0, 1fr) 70px minmax(0, 1fr); align-items: start; }
-  @media (max-width: 1100px) { .net { grid-template-columns: 1fr; } .coax { display: none !important; } }
+  @media (max-width: 1100px) { .net { grid-template-columns: 1fr; } .coax { display: none !important; } .bus { padding-left: 0; } .bus::before { display: none; } }
 
   .machine { background: linear-gradient(#e2dbca, var(--beige)); color: #2b2a26; border-radius: 14px;
              padding: 16px; border: 1px solid var(--beige-edge); box-shadow: 0 10px 30px #0006;
@@ -61,16 +61,35 @@
   .muted { color: #6c675c; }
   .status { font: 12px ui-monospace, monospace; color: #5f5a50; margin-left: auto; }
 
-  .coax { display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 160px; gap: 8px; color: var(--muted); font-size: 11px; text-align: center; }
-  .cable { width: 100%; height: 8px; background: #111; border-radius: 4px; position: relative; overflow: hidden; }
+  .coax { display: flex; flex-direction: column; align-items: center; padding-top: 8px; gap: 8px; color: var(--muted); font-size: 11px; text-align: center; }
+  .cable { width: 100%; height: 6px; background: var(--coax); border-radius: 4px; position: relative; overflow: hidden; }
   .cable.busy::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--green), transparent); animation: flow .5s linear infinite; }
   @keyframes flow { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
-  .workstations { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+  /* The coax bus: a trunk down the left of the workstations, a run along the top of each row,
+     and a drop into every workstation. Each segment lights up while its node is talking. */
+  .bus { --tap: 18px; position: relative; padding: 22px 0 0 var(--tap); }
+  .bus::before { content: ""; position: absolute; left: 0; top: 8px; width: 6px; height: var(--trunk, 6px); background: var(--coax); border-radius: 3px; }
+  .workstations { display: grid; gap: 22px var(--tap); grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+  .machine.ws { position: relative; }
+  .tap { position: absolute; left: calc(-1 * var(--tap)); right: 0; top: -14px; height: 6px; background: var(--coax); border-radius: 3px; overflow: hidden; pointer-events: none; }
+  .drop { position: absolute; left: 40px; top: -11px; width: 6px; height: 12px; background: var(--coax); pointer-events: none; }
+  .tap.busy::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--green), transparent); animation: flow .5s linear infinite; }
+  .drop.busy { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .crt { position: relative; }
+  .notice { position: absolute; inset: 16px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px;
+            background: #000c; color: var(--text); border-radius: 10px; padding: 16px; text-align: center; font-size: 13px; cursor: default; }
+  .notice[hidden] { display: none; }
+  .notice button { background: var(--amber); color: #2b2210; border: 0; border-radius: 6px; padding: 6px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  .notice button.secondary { background: #44423b; color: var(--text); }
+  .notice.toast { inset: auto 24px 24px 24px; padding: 8px 12px; background: #000d; }
+  .machine.captured { outline-color: var(--green); }
   .add-ws { display: flex; gap: 8px; margin-top: 12px; }
   .add-ws button, .rom button, .rom .btn { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px;
                                            padding: 5px 11px; cursor: pointer; font: inherit; font-size: 13px; }
   .rom { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; font-size: 13px; }
   .rom .label { font-weight: 600; }
+  .rom .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; width: 100%; }
+  .rom .row[hidden] { display: none; }
   .rom.missing { background: #3a2c16; border: 1px solid var(--amber); border-radius: 8px; padding: 10px 12px; }
   .help { color: var(--muted); font-size: 13px; margin-top: 18px; max-width: 1100px; }
   code { background: #0004; padding: 1px 5px; border-radius: 4px; }
@@ -84,13 +103,27 @@
     <label class="sub" style="margin-left:auto"><input id="sound" type="checkbox" checked> sound</label>
   </header>
 
+  <!-- Boot ROMs: one shared by every machine, or one per machine kind. -->
   <div class="rom" id="rom-bar">
-    <span class="label">Boot ROM</span>
-    <span id="rom-name" class="sub">none loaded</span>
-    <label><input id="rom-load" type="file" multiple hidden><span class="btn">Load ROM…</span></label>
-    <button id="rom-forget" hidden>Forget</button>
-    <span id="rom-note" class="sub"></span>
+    <div class="row" id="rom-shared">
+      <span class="label">Boot ROM</span>
+      <span class="name sub">none loaded</span>
+      <label><input class="load" type="file" multiple hidden><span class="btn">Load ROM…</span></label>
+      <button class="forget" hidden>Forget</button>
+    </div>
+    <div class="row">
+      <label class="sub"><input id="rom-same" type="checkbox" checked> Use the same ROM for all devices</label>
+      <span id="rom-note" class="sub"></span>
+    </div>
   </div>
+  <template id="rom-row-template">
+    <div class="row">
+      <span class="label"></span>
+      <span class="name sub">using the shared ROM</span>
+      <label><input class="load" type="file" multiple hidden><span class="btn">Load ROM…</span></label>
+      <button class="forget" hidden>Forget</button>
+    </div>
+  </template>
 
   <div class="net">
     <!-- LEXICON fileserver -->
@@ -127,18 +160,19 @@
 
     <div class="coax"><div class="cable" id="cable"></div><span>ICONET<br>coax</span><span id="packets">0 packets</span></div>
 
-    <!-- ICON workstations (cloned from the template below) -->
+    <!-- Workstations (cloned from the template below), tapped onto the coax bus -->
     <div>
-      <div class="workstations" id="workstations"></div>
-      <div class="add-ws">
-        <button id="ws-add">Add workstation</button>
-        <button id="ws-remove">Remove last</button>
+      <div class="bus" id="bus"><div class="workstations" id="workstations"></div></div>
+      <div class="add-ws" id="add-nodes">
+        <!-- One "Add … node" button per emulated kind is added by app.js -->
+        <button id="node-remove">Remove last</button>
       </div>
     </div>
   </div>
 
   <template id="ws-template">
-    <section class="machine">
+    <section class="machine ws">
+      <div class="tap"></div><div class="drop"></div>
       <h2><span class="ws-title">ICON workstation</span> <small class="status">off</small></h2>
       <div class="crt"><canvas width="640" height="240"></canvas></div>
       <div class="kbd"><span class="ball"></span></div>
@@ -154,12 +188,14 @@
 
   <p class="help">
     The boot ROM is not included: load the 32 KB interleaved image, or both 16 KB EPROM dumps at once
-    (5053-1 = even bytes, 5053-2 = odd). It is kept in this browser only. Each workstation boots over the
+    (5053-1 = even bytes, 5053-2 = odd). It is kept in this browser only. Untick "Use the same ROM for all
+    devices" to give the LEXICON and the ICONs different ROMs. Each workstation boots over the
     network as node 15 + its number (16, 17, …).
     To install: insert the <b>ICON Fileserver Boot Diskette</b> (4.01.00), add a hard disk, power on the fileserver and
     wait for <code>Login:</code>, then power on a workstation.
     Log in as <code>root</code> / <code>superuser</code>. Click a machine to give it the keyboard.
-    Click a screen to use the mouse as the trackball (left/right button = the two ACTION keys; Esc releases).
+    Click a screen to capture the keyboard and mouse: the mouse is the trackball and its buttons are the two ACTION keys.
+    Press <b>Ctrl+Alt</b> to release (the browser also always releases on Esc).
     F11 / F12 = ACTION, Insert = HELP, Delete = RUBOUT, Scroll Lock = CURSOR LOCK, Home = CLR.
     The hard disk autosaves in this browser; disk changes apply at the next fileserver power-on.
     "New 64 MB" is a factory-formatted 1024×8×17 drive (two 32 MB partitions plus a small third); see docs/INSTALL.md.

@@ -1,5 +1,8 @@
 //! WebAssembly front end: an ICONET segment with a LEXICON fileserver
 //! (slot 0) and one or more ICON workstations (slots 1.., node 15 + slot).
+//!
+//! Each slot has a machine kind, and each kind its own boot ROM, so a
+//! fileserver ROM and a workstation ROM can differ (later: ICON2, ICON3).
 
 use icon_core::devices::nvram::presets;
 use icon_core::devices::wd1002::Disk;
@@ -8,7 +11,6 @@ use icon_core::machine::{Config, Machine, CPU_HZ, STRAPS_NORMAL};
 use wasm_bindgen::prelude::*;
 
 pub const FILESERVER: usize = 0;
-pub const WORKSTATION: usize = 1;
 
 /// A blank 10 MB (306 x 4 x 17) hard disk image.
 #[wasm_bindgen]
@@ -31,25 +33,38 @@ fn check_rom(rom: &[u8]) -> Result<(), JsError> {
     Ok(())
 }
 
+/// Machine kinds a slot can hold. Only the original ICON hardware is emulated so far.
+pub const LEXICON: &str = "lexicon";
+pub const ICON: &str = "icon";
+const NODE_KINDS: [&str; 1] = [ICON];
+
 #[wasm_bindgen]
 pub struct Network {
     lan: Lan,
-    rom: Vec<u8>,
+    /// Kind of machine in each slot.
+    kinds: Vec<String>,
+    /// Boot ROM per machine kind.
+    roms: std::collections::HashMap<String, Vec<u8>>,
 }
 
 #[wasm_bindgen]
 impl Network {
+    /// A segment with the fileserver and one ICON workstation, and no ROMs yet.
     #[wasm_bindgen(constructor)]
-    pub fn new(rom: &[u8]) -> Result<Network, JsError> {
-        check_rom(rom)?;
-        Ok(Network { lan: Lan::new(2), rom: rom.to_vec() })
+    pub fn new() -> Network {
+        Network { lan: Lan::new(2), kinds: vec![LEXICON.into(), ICON.into()], roms: Default::default() }
     }
 
-    /// Replace the boot ROM; machines pick it up at their next power-on.
-    pub fn set_rom(&mut self, rom: &[u8]) -> Result<(), JsError> {
+    /// Set the boot ROM for one machine kind ("lexicon", "icon"). Machines
+    /// pick it up at their next power-on.
+    pub fn set_rom(&mut self, kind: &str, rom: &[u8]) -> Result<(), JsError> {
         check_rom(rom)?;
-        self.rom = rom.to_vec();
+        self.roms.insert(kind.to_string(), rom.to_vec());
         Ok(())
+    }
+
+    pub fn has_rom(&self, kind: &str) -> bool {
+        self.roms.contains_key(kind)
     }
 
     /// Number of slots (fileserver plus workstations).
@@ -57,32 +72,47 @@ impl Network {
         self.lan.nodes.len()
     }
 
-    /// Add a workstation slot (powered off); returns its slot number.
-    pub fn add_workstation(&mut self) -> usize {
-        self.lan.nodes.push(None);
-        self.lan.grow();
-        self.lan.nodes.len() - 1
+    /// The machine kind in a slot.
+    pub fn kind(&self, slot: usize) -> String {
+        self.kinds.get(slot).cloned().unwrap_or_default()
     }
 
-    /// Remove the last workstation slot if it is off and not the only one.
-    pub fn remove_workstation(&mut self) -> bool {
+    /// Add a powered-off node of the given kind; returns its slot number.
+    pub fn add_node(&mut self, kind: &str) -> Result<usize, JsError> {
+        if !NODE_KINDS.contains(&kind) {
+            return Err(JsError::new(&format!("{kind} nodes are not emulated yet")));
+        }
+        self.lan.nodes.push(None);
+        self.lan.grow();
+        self.kinds.push(kind.to_string());
+        Ok(self.lan.nodes.len() - 1)
+    }
+
+    /// Remove the last node if it is off and not the only workstation.
+    pub fn remove_last_node(&mut self) -> bool {
         if self.lan.nodes.len() <= 2 || self.lan.nodes.last().is_some_and(|n| n.is_some()) {
             return false;
         }
         self.lan.nodes.pop();
         self.lan.grow();
+        self.kinds.pop();
         true
     }
 
+    /// Packets this node has sent or received so far (for its coax light).
+    pub fn activity(&self, slot: usize) -> f64 {
+        self.lan.activity.get(slot).copied().unwrap_or(0) as f64
+    }
+
     /// Power a machine on. `host_time` is local wall-clock seconds (for the
-    /// fileserver's battery clock); disks are attached separately.
-    pub fn power_on(&mut self, slot: usize, host_time: f64) {
-        if slot >= self.lan.nodes.len() {
-            return;
-        }
+    /// fileserver's battery clock); disks are attached separately. Fails if
+    /// there is no ROM for the slot's kind.
+    pub fn power_on(&mut self, slot: usize, host_time: f64) -> Result<(), JsError> {
+        let Some(kind) = self.kinds.get(slot) else { return Err(JsError::new("no such node")) };
+        let rom = self.roms.get(kind).ok_or_else(|| JsError::new(&format!("no {kind} ROM loaded")))?.clone();
         let fs = slot == FILESERVER;
         let m = Machine::new(Config {
-            rom: self.rom.clone(),
+            rom,
             patch_800k_floppy: false,
             ram_kb: 512,
             nvram: if fs {
@@ -97,6 +127,7 @@ impl Network {
             disk_controller: fs,
         });
         self.lan.power_on(slot, m);
+        Ok(())
     }
 
     pub fn power_off(&mut self, slot: usize) {

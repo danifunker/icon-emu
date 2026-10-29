@@ -16,7 +16,9 @@ make serve      # http://localhost:8086
 make cli        # target/release/icon-cli and icon-ci
 ```
 
-- In the page, click **Load ROM…** and pick the 32 KB ROM image, or both 16 KB EPROM dumps at once. The ROM is kept only in your browser.
+- In the page, click **Load ROM…** and pick the 32 KB ROM image, or both 16 KB EPROM dumps at once. The ROM is kept only in your browser. Untick **Use the same ROM for all devices** to give the LEXICON and the ICONs different ROMs.
+- **Add ICON node** adds more workstations to the network.
+- Click a screen to capture the keyboard and mouse; **Ctrl+Alt** releases them.
 - Then add a hard disk, insert the boot diskette and power on the fileserver.
 - [docs/INSTALL.md](docs/INSTALL.md) walks through a full 4.10.01 install.
 - [docs/HEADLESS.md](docs/HEADLESS.md) covers headless and scripted use (`icon-cli serve` with the `icon-ci` client).

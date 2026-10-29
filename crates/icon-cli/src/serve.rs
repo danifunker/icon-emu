@@ -26,24 +26,35 @@ pub fn main(argv: Vec<String>) {
     let mut socket = std::env::var("ICON_CI_SOCKET").unwrap_or_else(|_| DEFAULT_SOCKET.into());
     let mut rom = format!("{}/repos/icon_icon2_research/firmware/ICON1/icon1_rom_combined.bin", std::env::var("HOME").unwrap_or_default());
     let (mut hd, mut floppy, mut workstations) = (None, None, 1usize);
+    // --rom is used by every machine unless --fs-rom / --ws-rom override it.
+    let (mut fs_rom, mut ws_rom): (Option<String>, Option<String>) = (None, None);
     let mut it = argv.into_iter();
     while let Some(k) = it.next() {
         let mut v = || it.next().unwrap_or_else(|| panic!("missing value for {k}"));
         match k.as_str() {
             "--socket" => socket = v(),
             "--rom" => rom = v(),
+            "--fs-rom" => fs_rom = Some(v()),
+            "--ws-rom" => ws_rom = Some(v()),
             "--hd" => hd = Some(std::fs::read(v()).expect("read hard disk image")),
             "--floppy" => floppy = Some(std::fs::read(v()).expect("read floppy image")),
             "--workstations" => workstations = v().parse().expect("number"),
             "-h" | "--help" => {
-                println!("icon-cli serve [--socket {DEFAULT_SOCKET}] [--rom F] [--hd IMG] [--floppy IMG] [--workstations N]");
+                println!("icon-cli serve [--socket {DEFAULT_SOCKET}] [--rom F] [--fs-rom F] [--ws-rom F] [--hd IMG] [--floppy IMG] [--workstations N]");
                 return;
             }
             _ => panic!("unknown serve argument {k}"),
         }
     }
-    let rom = std::fs::read(&rom).unwrap_or_else(|e| panic!("read ROM {rom}: {e}"));
-    let rig = Rig::new(&rom, workstations).expect("ROM");
+    let read = |f: &str| std::fs::read(f).unwrap_or_else(|e| panic!("read ROM {f}: {e}"));
+    let mut rig = Rig::new(&read(fs_rom.as_deref().unwrap_or(&rom)), workstations).expect("fileserver ROM");
+    if fs_rom.is_some() || ws_rom.is_some() {
+        let ws = read(ws_rom.as_deref().unwrap_or(&rom));
+        if ws.len() != 0x8000 {
+            panic!("workstation ROM must be the 32 KB interleaved image");
+        }
+        rig.workstation_rom = Some(ws);
+    }
     let mut server = Server { rig, hd, floppy, quit: false };
     let _ = std::fs::remove_file(&socket);
     let listener = UnixListener::bind(&socket).unwrap_or_else(|e| panic!("bind {socket}: {e}"));
