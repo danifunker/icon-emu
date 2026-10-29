@@ -27,7 +27,9 @@ make cli        # target/release/icon-cli and icon-ci
 
 | Document | Contents |
 |---|---|
-| [docs/INSTALL.md](docs/INSTALL.md) | Installing ICON 4.10.01 onto 10 MB and 64 MB hard disks, adding packages |
+| [docs/REBUILD.md](docs/REBUILD.md) | Step-by-step rebuild of a whole network: which disks, in which order (4.10.01, Help, QDOS, users) |
+| [docs/ADMIN.md](docs/ADMIN.md) | Running it: paths and drives, user accounts, `.login`, House, shutting down |
+| [docs/INSTALL.md](docs/INSTALL.md) | Installing ICON 4.10.01 onto 10 MB and 64 MB hard disks in detail, adding packages |
 | [docs/HEADLESS.md](docs/HEADLESS.md) | Control-socket mode for tests and tools |
 | [docs/UI.md](docs/UI.md) | The web page |
 | [docs/com9026.md](docs/com9026.md), [docs/input_video.md](docs/input_video.md), [docs/nvram_rtc_disk_install.md](docs/nvram_rtc_disk_install.md) | Hardware reverse-engineering notes |
