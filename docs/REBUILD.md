@@ -26,14 +26,7 @@ More detail on the install itself is in [INSTALL.md](INSTALL.md). Day-to-day adm
 Disks to avoid or not needed yet:
 - **Anything with "(bad sectors)" in the name**, i.e. most of `System 4.10.01 (Copy 2)`. Use the copies in `System 4.10.01`.
 - **`ISSW_4.10.01_Home_brew_fileserver_boot.img`**. Despite its name it carries the 4.01 kernel and no workstation images.
-- **The 4.10.05 patch disk** (`ICON_SERIES_SYSTEM_SW_UPGRADE_DISKETTE_4.10.05_PATCH_RELEASE_NOV_1_1991.img`). The full patch install hasn't been tried ⚠. But its `ws_boot` is **required for workstations with the Rel 2.11 boot ROM** ✅: Rel 2.11 writes the boot server's node number into the image at offset 48h, which breaks the 4.10.01 `ws_boot`. With the patch disk in the fileserver's drive (drive 2):
-
-  ```
-  chattr 1:/boot/ws_boot a=+w
-  copy 2:/boot/ws_boot 1:/boot/ws_boot
-  ```
-
-  The 5053 ISS 2 ROM boots either version.
+- **The 4.10.05 patch disk** (`ICON_SERIES_SYSTEM_SW_UPGRADE_DISKETTE_4.10.05_PATCH_RELEASE_NOV_1_1991.img`). Optional with the 5053 ROM, but **required for workstations with the Rel 2.11 boot ROM**. Install it with section 2b below.
 - **The `Programming` folder** (C, Logo, Watcom BASIC/Pascal, GKS) and the QDOS support disks. These are packages for `install_software` that haven't been tried yet ⚠.
 
 The default administrator login is **`root` / `superuser`**.
@@ -64,6 +57,23 @@ The hard disk is saved in your browser automatically. **Download .img** gives yo
 8. "Installation … complete": press a key, then **OK**.
 9. **Eject** the floppy and power-cycle the fileserver. It now boots 4.10.01 from its hard disk. Power-cycle the workstation too.
 10. **Download .img** now, as a clean base install to fall back to.
+
+## 2b. Upgrade to 4.10.05 ✅ (needed for Rel 2.11 workstations)
+
+The patch disk holds new boot images (`ws_boot`, `hd_boot`, `ws_fsys_boot`, `ws3_boot`, the ICON2 images), `dbase_admin`, `node_info`, the boot messages and the ICON2 hard-disk driver. Rel 2.11 workstations need its `ws_boot`: the ROM writes the boot server's node number into the image at offset 48h, which breaks the 4.10.01 `ws_boot`.
+
+It's a System Software upgrade, so it goes in with **`configure`**, not `install_software` (`install_software` says "You must use the program configure"). `configure` in turn needs the fileserver booted from a boot diskette ("FATAL ERROR! You must boot the machine from the appropriate boot diskette"). It does **not** reformat an installed disk: it says "The fileserver's first hard drive will NOT be initialized".
+
+1. Fileserver: your installed hard disk attached, the **4.01 fileserver boot diskette** inserted, **Power**. Wait for `Login:`.
+2. Insert the **4.10.01 Netcard fileserver boot disk**. Power on a workstation and log in as root.
+3. Insert the **Configuration diskette**. On the workstation, type `configure`.
+4. **OK** on "You will be configuring the NETWORK fileserver".
+5. "Please put the first diskette of the SYSTEM SOFTWARE package…": insert the **4.10.05 patch disk**, then **OK**.
+6. "Please re-insert the Configuration diskette": insert it, then **OK**.
+7. Check it says "The fileserver's first hard drive will NOT be initialized", then click **Perform**.
+8. It asks for the SYSTEM SOFTWARE diskette again: insert the **4.10.05 patch disk**, then **OK**. It reports "The ICON Series System SW Upgrade Release 4.10.05 is now installed on [1]2:/" (drive 2 is the hard disk here, because the fileserver booted from the floppy).
+9. Press a key, then **OK** on "You have completed the configuration procedure".
+10. **Eject**, then power-cycle the fileserver (it boots from its hard disk) and then the workstations. Run `verify_net`, as `configure` asks.
 
 ## 3. Add On-line Help ✅
 
