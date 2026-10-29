@@ -10,7 +10,7 @@ More detail on the install itself is in [INSTALL.md](INSTALL.md). Day-to-day adm
 
 ## 0. What you need
 
-- **The boot ROM:** the ICON's two 16 KB EPROMs (5053-1 even bytes, 5053-2 odd bytes, ISS 2) or the 32 KB interleaved image. Load it with **Load ROM…** at the top of the page. The page shows "stock 5053 ISS 2" when it recognises the original dump.
+- **The boot ROM:** the ICON's two 16 KB EPROMs (5053-1 even bytes, 5053-2 odd bytes, ISS 2) or the 32 KB interleaved image. The later **Rel 2.11** pair (U33 200-504-000 LOW, U36 200-503-000 HIGH) also works: it's recognised as "Rel 2.11". Its workstations need the 4.10.05 `ws_boot` (below). Load it with **Load ROM…** at the top of the page. The page shows "stock 5053 ISS 2" when it recognises the original dump.
 - **The disk images below.** All paths are relative to `Disk_1/`.
 
 | Purpose | Folder | File |
@@ -26,7 +26,14 @@ More detail on the install itself is in [INSTALL.md](INSTALL.md). Day-to-day adm
 Disks to avoid or not needed yet:
 - **Anything with "(bad sectors)" in the name**, i.e. most of `System 4.10.01 (Copy 2)`. Use the copies in `System 4.10.01`.
 - **`ISSW_4.10.01_Home_brew_fileserver_boot.img`**. Despite its name it carries the 4.01 kernel and no workstation images.
-- **The 4.10.05 patch disk** (`ICON_SERIES_SYSTEM_SW_UPGRADE_DISKETTE_4.10.05_PATCH_RELEASE_NOV_1_1991.img`). Not tried yet ⚠.
+- **The 4.10.05 patch disk** (`ICON_SERIES_SYSTEM_SW_UPGRADE_DISKETTE_4.10.05_PATCH_RELEASE_NOV_1_1991.img`). The full patch install hasn't been tried ⚠. But its `ws_boot` is **required for workstations with the Rel 2.11 boot ROM** ✅: Rel 2.11 writes the boot server's node number into the image at offset 48h, which breaks the 4.10.01 `ws_boot`. With the patch disk in the fileserver's drive (drive 2):
+
+  ```
+  chattr 1:/boot/ws_boot a=+w
+  copy 2:/boot/ws_boot 1:/boot/ws_boot
+  ```
+
+  The 5053 ISS 2 ROM boots either version.
 - **The `Programming` folder** (C, Logo, Watcom BASIC/Pascal, GKS) and the QDOS support disks. These are packages for `install_software` that haven't been tried yet ⚠.
 
 The default administrator login is **`root` / `superuser`**.
