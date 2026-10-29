@@ -6,4 +6,5 @@ license.workspace = true
 description = "Emulator core for the Unisys/CEMCORP ICON and LEXICON (80186)"
 
 [dependencies]
-qnx2fs = "0.2"
+# qnx2fs 0.3.0 (fold_date); switch to "0.3" once it is on crates.io.
+qnx2fs = { git = "https://github.com/danifunker/qnx2fs", rev = "205a309" }

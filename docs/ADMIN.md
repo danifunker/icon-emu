@@ -54,7 +54,7 @@ Rules:
 - **The diskette** can be changed at any time. The page takes it out, makes the change and puts it back, like swapping diskettes by hand. Don't do it while the ICON is writing to the diskette.
 - **The hard disk** can only be changed while **every machine is off**. The fileserver keeps parts of the disk in memory and would write over the change, and a running workstation may be using it. While anything is on, the panel and the editor are read-only, showing the disk as last saved.
 - **Names** must fit QNX: up to 16 letters, digits, `_`, `.` or `$`. Other characters become `_`, and long names are shortened. The panel says when it renames something.
-- Files you upload or save are dated with the emulated ICON clock: today's date in 1991, as files the ICON writes itself. Files you **copy** between disks keep their original dates.
+- Files you upload or save are dated with the emulated ICON clock: today's date in 1994, as files the ICON writes itself (see [Dates](#dates)). Files you **copy** between disks keep their original dates.
 - A new file uploaded from your computer gets QNX's default permissions, which don't include "execute". If it is a program, mark it runnable on the ICON with `chattr 1:/path/name a=+e pg=+e po=+e`, or copy it from an ICON disk with **Copy to…** instead. Replacing an existing file keeps that file's permissions.
 
 To give a student a file, upload it straight into their home folder on the hard disk (`/user/<login>`) with every machine off. Or put it on a diskette and have them `copy [1]2:/name name`.
@@ -134,6 +134,12 @@ House has its own QNX shell window, so this keeps students out of the prompt *af
 - The fileserver is always **node 1**. Workstations boot from it over ICONET as nodes 16, 17, …
 - `/config/net.config` lists the nodes. `verify_net` checks it against the network and fills in the hardware database.
 - If the network hangs, the fileserver may have run out of virtual circuits. `kill_vcs`, or reboot the fileserver and then every workstation ⚠.
+
+## Dates
+
+The ICON stores dates with a 4-bit year, so it can only hold **1980 to 1995**. The emulator therefore runs the ICON's clock on **today's month, day and time, in 1994**. On 29 February, which 1994 doesn't have, it uses **1992**. 1994 sorts after all the ICON system software (the last release is from 1991), and a machine left running past New Year's Eve moves into 1995, which the ICON can still store.
+
+**Check the date when a machine starts.** The login screen shows the date the ICON is using, for example `October 29 1994  4:35 pm`. Everything QNX writes, and every file you upload or save in the Files panel, gets that date. Files copied between ICON disks keep their original dates. The same rule is used by RustyBackup and the `qnx2fs` crate when they write modern files to ICON disks.
 
 ## Sending a message to everyone
 

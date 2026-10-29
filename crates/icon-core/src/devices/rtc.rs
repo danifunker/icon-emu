@@ -4,7 +4,9 @@
 //! H10 bit 3 = 24-hour mode, bit 2 = PM; D10 bit 2 = leap-year flag.
 //!
 //! The host's clock is the time source, but QNX 2 dates only reach 1995, so
-//! the year is moved to 1991 (1992 when the host year is a leap year).
+//! the year is moved to 1994 (29 February to 1992), as `qnx2fs::fold_date`
+//! does. A clock left running past New Year's Eve reaches 1995, which QNX can
+//! still store.
 //! Writes from `set_rtc` are kept as an offset.
 
 #[derive(Clone, Debug, Default)]
@@ -45,11 +47,10 @@ fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
 }
 
 /// Host time as the emulated ICON sees it: the same month, day and time of
-/// day, in 1991 (1992 when the host year is a leap year).
+/// day, in 1994 (29 February in 1992). The rule is `qnx2fs::fold_date`, shared
+/// with the files the emulator writes and with RustyBackup.
 pub fn icon_time(host_unix_secs: i64) -> i64 {
-    let (y, m, d) = civil_from_days(host_unix_secs.div_euclid(86_400));
-    let target = if is_leap(y) { 1992 } else { 1991 };
-    days_from_civil(target, m, d) * 86_400 + host_unix_secs.rem_euclid(86_400)
+    qnx2fs::fold_date(host_unix_secs)
 }
 
 impl Msm5832 {
@@ -119,12 +120,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn leap_day_goes_to_1992_and_new_years_eve_reaches_1995() {
+        let feb29 = days_from_civil(2024, 2, 29) * 86_400 + 9 * 3600;
+        let r = Msm5832::new(feb29);
+        assert_eq!((r.clone().read(11, 0), r.clone().read(12, 0)), (2, 9)); // year 92
+        let nye = days_from_civil(2026, 12, 31) * 86_400 + 23 * 3600 + 59 * 60;
+        let mut r = Msm5832::new(nye);
+        assert_eq!((r.read(11, 0), r.read(12, 0)), (4, 9)); // 94
+        assert_eq!((r.read(11, 120), r.read(12, 120)), (5, 9)); // two minutes later: 95
+    }
+
+    #[test]
     fn maps_host_date_into_qnx_range() {
         // 2026-10-28 12:34:56 UTC
         let t = days_from_civil(2026, 10, 28) * 86_400 + 12 * 3600 + 34 * 60 + 56;
         let mut r = Msm5832::new(t);
         let regs: Vec<u8> = (0..13).map(|i| r.read(i, 0)).collect();
-        assert_eq!(regs, vec![6, 5, 4, 3, 2, 1 | 8, 1, 8, 2, 0, 1, 1, 9]); // Mon 28-10-91
+        assert_eq!(regs, vec![6, 5, 4, 3, 2, 1 | 8, 5, 8, 2, 0, 1, 4, 9]); // Fri 28-10-94
         r.write(11, 0, 0); // year 90
         assert_eq!(r.read(11, 10), 0);
         assert_eq!(r.read(0, 10), 6); // 56 + 10 s = 06

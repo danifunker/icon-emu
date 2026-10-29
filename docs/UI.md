@@ -29,6 +29,7 @@ To give the fileserver and the workstations different ROMs, untick **Use the sam
 
 - **Power** switches a machine on or off. Switch the fileserver on first and wait for `Login:`, then the workstations.
 - Workstations boot from the fileserver over the network. They become nodes 16, 17, 18 and so on.
+- **Check the date on the login screen.** The ICON can only store the years 1980–1995, so its clock shows today's date and time **in 1994** (1992 on 29 February). Files it writes are dated that way; see [Dates](ADMIN.md#dates).
 - **Add ICON node** adds another workstation. **Remove last** removes the last one, once it is switched off.
 
 The lights:

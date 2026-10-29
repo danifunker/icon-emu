@@ -36,7 +36,7 @@ pub fn blank_floppy_640k() -> Vec<u8> {
 // image and returns the changed copy; the page decides when that is safe (a
 // diskette is swapped out and back in, a hard disk only while the fileserver
 // is off). `offset` is a volume's byte offset from `disk_volumes`; `now` is
-// local wall-clock seconds, dated into 1991 as the emulated clock does.
+// local wall-clock seconds, dated into 1994 as the emulated clock does.
 
 use icon_core::files::{self, qnx2fs};
 use icon_core::text;
