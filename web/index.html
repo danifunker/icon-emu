@@ -96,6 +96,11 @@
   .typer textarea { display: block; width: 100%; margin: 8px 0; min-height: 120px; background: #111214; color: var(--text);
                     border: 1px solid #44423b; border-radius: 6px; padding: 8px; font: 12px ui-monospace, monospace; }
   .typer button { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px; padding: 5px 11px; cursor: pointer; font: inherit; }
+  .docs { margin-top: 18px; max-width: 1100px; font-size: 13px; color: var(--muted); }
+  .docs h2 { font-size: 14px; color: var(--text); margin: 0 0 6px; }
+  .docs ul { margin: 0; padding-left: 18px; }
+  .docs li { margin: 3px 0; }
+  a { color: var(--amber); }
   .help { color: var(--muted); font-size: 13px; margin-top: 18px; max-width: 1100px; }
   code { background: #0004; padding: 1px 5px; border-radius: 4px; }
 </style>
@@ -206,7 +211,7 @@
     network as node 15 + its number (16, 17, …).
     <b>Workstations with the Rel 2.11 boot ROM need ICON System Software 4.10.05</b> on the fileserver:
     the 4.10.01 workstation boot image crashes under that ROM. Install the 4.10.05 upgrade diskette with
-    <code>configure</code> (see docs/REBUILD.md, section 2b). The 5053 ISS 2 ROM works with either.
+    <code>configure</code> (see <a href="https://github.com/danifunker/icon-emu/blob/main/docs/REBUILD.md">the rebuild guide</a>, section 2b). The 5053 ISS 2 ROM works with either.
     To install: insert the <b>ICON Fileserver Boot Diskette</b> (4.01.00), add a hard disk, power on the fileserver and
     wait for <code>Login:</code>, then power on a workstation.
     Log in as <code>root</code> / <code>superuser</code>. Click a machine to give it the keyboard.
@@ -214,8 +219,18 @@
     Press <b>Ctrl+Alt</b> to release (the browser also always releases on Esc).
     F11 / F12 = ACTION, Insert = HELP, Delete = RUBOUT, Scroll Lock = CURSOR LOCK, Home = CLR.
     The hard disk autosaves in this browser; disk changes apply at the next fileserver power-on.
-    "New 64 MB" is a factory-formatted 1024×8×17 drive (two 32 MB partitions plus a small third); see docs/INSTALL.md.
+    "New 64 MB" is a factory-formatted 1024×8×17 drive (two 32 MB partitions plus a small third); see <a href="https://github.com/danifunker/icon-emu/blob/main/docs/INSTALL.md">the install notes</a>.
   </p>
+  <section class="docs">
+    <h2>Instructions</h2>
+    <ul>
+      <li><a href="https://github.com/danifunker/icon-emu/blob/main/docs/REBUILD.md">Rebuilding a LEXICON network from scratch</a>: which disks, in which order (4.10.01, the 4.10.05 upgrade, Help, QDOS, students)</li>
+      <li><a href="https://github.com/danifunker/icon-emu/blob/main/docs/ADMIN.md">Administrator notes</a>: paths and drives, adding users, <code>.login</code> and House, speech, shutting down</li>
+      <li><a href="https://github.com/danifunker/icon-emu/blob/main/docs/INSTALL.md">Installing 4.10.01 in detail</a>: 10 MB and 64 MB hard disks, adding packages</li>
+      <li><a href="https://github.com/danifunker/icon-emu/blob/main/docs/HEADLESS.md">Headless mode</a>: scripting the emulator from the command line</li>
+      <li><a href="https://github.com/danifunker/icon-emu">Source code and README</a></li>
+    </ul>
+  </section>
 </main>
 <script type="module" src="app.js"></script>
 </body>
