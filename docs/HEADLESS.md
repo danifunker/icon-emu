@@ -71,6 +71,22 @@ These copy files between your computer and the ICON's disks directly, without ty
 - Files are dated with the emulated clock (today's date in 1991).
 - `floppy-new` gives you a formatted diskette to `put` files on.
 
+### Without a running machine: `icon-cli disk`
+
+`icon-cli disk` does the same on a disk image file directly, with no server and no ROM. Changes are written back to the image.
+
+```
+icon-cli disk IMAGE [--part N] ls [PATH]
+icon-cli disk IMAGE [--part N] cat PATH
+icon-cli disk IMAGE [--part N] get PATH HOSTFILE [--text]
+icon-cli disk IMAGE [--part N] put HOSTFILE PATH [--text] [--replace]
+icon-cli disk IMAGE [--part N] mkdir PATH
+icon-cli disk IMAGE [--part N] rm PATH
+icon-cli disk IMAGE [--part N] check
+```
+
+`--part` picks a hard-disk partition (default the first). `cat` prints a text file decoded (accents, line ends). `check` checks the filesystem and exits with 1 if it finds errors. It is handy in CI to prepare a disk before `icon-cli serve --hd`, or to inspect one afterwards.
+
 For example, to load data, run a program on it and fetch the result:
 
 ```

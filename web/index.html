@@ -113,6 +113,7 @@
   .fm-title { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--fm-title); color: #fff; }
   .fm-title-name { font-weight: 600; letter-spacing: .02em; }
   .fm-title select { margin-left: auto; }
+  .fm-title button, .fm-title .fm-btn { padding: 3px 9px; }
   .fm-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--fm-line); background: #fbfcfd; }
   .fm-gap { flex: 1; }
   .fm-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-family: ui-monospace, Menlo, Consolas, monospace; }
@@ -269,6 +270,9 @@
       <div class="fm-title">
         <span class="fm-title-name">ICON Files</span>
         <select id="files-src" title="Which disk"></select>
+        <label class="fm-btn" title="Work on a diskette or hard-disk image from this computer, without running any machine"><input id="files-open" type="file" hidden>Open image&hellip;</label>
+        <button id="files-save-img" title="Save the opened image, with your changes, to this computer" disabled>Download image</button>
+        <button id="files-close-img" title="Close the opened image" disabled>Close</button>
       </div>
       <div class="fm-toolbar">
         <button id="files-up" title="Up one folder">&#8593; Up</button>
@@ -312,7 +316,8 @@
         <textarea id="ed-text" spellcheck="false" wrap="off"></textarea>
       </div>
     </div>
-    <p class="fm-help">Double-click a folder to open it, or a file to download it. <b>Edit</b> adds Edit and Delete to each entry;
+    <p class="fm-help"><b>Open image…</b> works on a diskette or hard-disk image from your computer on its own, with no machine
+    running (and no ROM needed); <b>Download image</b> saves it with your changes. Double-click a folder to open it, or a file to download it. <b>Edit</b> adds Edit and Delete to each entry;
     deleting a folder deletes everything in it. The diskette can be changed at any time: the page takes it out, makes the
     change and puts it back, so don't change it while the ICON is writing to it. The hard disk can only be changed while
     <b>every machine is off</b>. Text is shown and saved with the ICON's accents and line ends; ⟦ and ⟧ are its underline

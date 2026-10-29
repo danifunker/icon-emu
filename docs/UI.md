@@ -88,7 +88,8 @@ A new or loaded hard disk is used from the next time the fileserver is switched 
 **Files** (below the machines) copies files between your computer and the ICON's diskette or hard disk, without using the ICON itself.
 
 It looks and works like a file manager, in its own light window:
-- The menu in the title bar picks **Diskette** or **Hard disk**.
+- The menu in the title bar picks **Diskette** or **Hard disk**, or an image you opened.
+- **Open image…** works on a diskette or hard-disk image from your computer **on its own**: no machine has to run, and no ROM is needed. Everything else in the window works the same on it, and it is never read-only, because no machine is using it. **Download image** saves it with your changes; **Close** puts it away (asking first if you haven't downloaded your changes). Opened images stay in this page only.
 - The **tree** on the left shows the folders. **▸** opens a folder in the tree and **▾** closes it; clicking a name opens that folder in the list.
 - The **path** above the list (*hard disk / help / editor*) is clickable, and **↑ Up** goes up one folder.
 - In the **list**, click to select, double-click a folder to open it, and double-click a file to download it. Icons tell folders, text files and other files apart.

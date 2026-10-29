@@ -565,6 +565,11 @@ $("rom-same").addEventListener("change", (e) => {
 // only while every machine is off: the fileserver caches it, and a running
 // workstation may be mid-way through using it.
 const fl = { src: null, path: "/", edit: false, open: null, sel: null, entries: null }; // open: the file in the editor; sel: the selected entry
+// Standalone: disk images opened from this computer, worked on without any
+// machine. Each is { id, name, data, dirty }. They live only in this page.
+const images = [];
+let nextImageId = 1;
+const skey = (s) => `${s.kind}:${s.id || 0}:${s.offset}`;
 const fstatus = (msg, err = false) => { $("files-status").textContent = msg; $("files-status").classList.toggle("err", err); };
 const enote = (msg, err = false) => { $("ed-note").textContent = msg; $("ed-note").classList.toggle("err", err); };
 const anyOn = () => !!net && machines.some((m, i) => net.is_on(i));
@@ -573,14 +578,25 @@ function hdImage() {
   if (!hardDisk.normalized) { hardDisk.data = normalize_hard_disk(hardDisk.data); hardDisk.normalized = true; }
   return hardDisk.data;
 }
+const imageOf = (src) => images.find((i) => i.id === src.id);
 function fimage(src) {
   if (src.kind === "fd") { syncFloppy(); return floppy.data; }
+  if (src.kind === "img") return imageOf(src).data;
   return hdImage();
 }
 function fsources() {
   const out = [];
   if (floppy) for (const v of JSON.parse(disk_volumes(floppy.data))) out.push({ kind: "fd", offset: v.offset, label: "Diskette" });
   if (hardDisk) for (const v of JSON.parse(disk_volumes(hdImage()))) out.push({ kind: "hd", offset: v.offset, label: `Hard disk, ${v.label}` });
+  for (const img of images) {
+    const vols = JSON.parse(disk_volumes(img.data));
+    for (const v of vols) {
+      const label = `${img.name}${v.label === "whole disk" ? "" : ", " + v.label}${img.dirty ? " (changed)" : ""}`;
+      out.push({ kind: "img", id: img.id, offset: v.offset, label });
+    }
+    // Keep an image with no QNX files in the menu, so it can be closed.
+    if (!vols.length) out.push({ kind: "img", id: img.id, offset: -1, label: `${img.name} (no ICON files)` });
+  }
   return out;
 }
 // Why the selected disk can't be changed right now, or "" if it can.
@@ -594,7 +610,11 @@ function fedit(edit) {
   const why = readOnlyReason(src);
   if (why) throw new Error(why);
   const data = edit(fimage(src));
-  if (src.kind === "fd") {
+  if (src.kind === "img") {
+    const img = imageOf(src);
+    img.data = data;
+    img.dirty = true;
+  } else if (src.kind === "fd") {
     floppy.data = data;
     if (net && net.is_on(FS)) net.insert_floppy(data);
   } else {
@@ -644,7 +664,7 @@ function frefresh() {
   if (!$("files-panel").open) return;
   const srcs = fsources();
   const sel = $("files-src");
-  const key = (s) => `${s.kind}:${s.offset}`;
+  const key = skey;
   const keep = fl.src && srcs.find((s) => key(s) === key(fl.src));
   if (!keep) { fl.path = "/"; fl_expanded.clear(); fl_collapsed.clear(); }
   fl.src = keep || srcs[0] || null;
@@ -660,11 +680,17 @@ function frefresh() {
   $("files-empty").hidden = true;
   $("files-download").disabled = true;
   $("files-up").disabled = !fl.src || fl.path === "/";
+  $("files-save-img").disabled = $("files-close-img").disabled = !fl.src || fl.src.kind !== "img";
+  if (fl.src && fl.src.offset < 0) {
+    fl.entries = null;
+    fstatus("This image has no ICON (QNX 2) filesystem: it may be blank, or another computer's disk.", true);
+    return;
+  }
   if (!fl.src) {
     fl.entries = null;
     fstatus(floppy || hardDisk
       ? "No ICON (QNX) files found. A diskette must be formatted for the ICON: New blank gives you one."
-      : "Insert a diskette (New blank gives an empty one) or add a hard disk first.");
+      : "Insert a diskette (New blank gives an empty one), add a hard disk, or use Open image… to work on a disk image from your computer.");
     return;
   }
   let view;
@@ -681,7 +707,7 @@ function frefresh() {
     a.addEventListener("click", () => fgo(path));
     return a;
   };
-  crumbs.append(link(fl.src.kind === "fd" ? "diskette" : "hard disk", "/"));
+  crumbs.append(link(fl.src.kind === "fd" ? "diskette" : fl.src.kind === "img" ? imageOf(fl.src).name : "hard disk", "/"));
   parts.forEach((p, i) => {
     const sep = document.createElement("span");
     sep.className = "sep";
@@ -715,7 +741,8 @@ function frefresh() {
       }
       frefresh();
     });
-    const label = icon(path === "/" ? (fl.src.kind === "fd" ? "floppy" : "hd") : open ? "folderOpen" : "folder");
+    const diskIcon = fl.src.kind === "fd" || (fl.src.kind === "img" && imageOf(fl.src).data.length <= 819200) ? "floppy" : "hd";
+    const label = icon(path === "/" ? diskIcon : open ? "folderOpen" : "folder");
     label.append(name);
     row.append(twisty, label);
     row.addEventListener("click", () => fgo(path));
@@ -856,13 +883,49 @@ $("ed-save").addEventListener("click", () => {
   }
   frefresh();
 });
-window.addEventListener("beforeunload", (e) => { if (fl.open && fl.open.dirty) e.preventDefault(); });
+window.addEventListener("beforeunload", (e) => { if ((fl.open && fl.open.dirty) || images.some((i) => i.dirty)) e.preventDefault(); });
+
+// Standalone images: open, download, close.
+$("files-open").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const img = { id: nextImageId++, name: file.name, data: normalize_hard_disk(new Uint8Array(await file.arrayBuffer())), dirty: false };
+  images.push(img);
+  const first = fsources().find((s) => s.kind === "img" && s.id === img.id);
+  fl.src = first;
+  fl.path = "/";
+  $("files-panel").open = true;
+  frefresh();
+  if (first && first.offset >= 0) fstatus(`Opened ${img.name}. Changes stay in this page until you use Download image.`);
+});
+$("files-save-img").addEventListener("click", () => {
+  const img = fl.src && fl.src.kind === "img" && imageOf(fl.src);
+  if (!img) return;
+  const url = URL.createObjectURL(new Blob([img.data], { type: "application/octet-stream" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = img.name;
+  a.click();
+  URL.revokeObjectURL(url);
+  img.dirty = false;
+  frefresh();
+});
+$("files-close-img").addEventListener("click", () => {
+  const img = fl.src && fl.src.kind === "img" && imageOf(fl.src);
+  if (!img) return;
+  if (img.dirty && !confirm(`${img.name} has changes you haven't downloaded. Close it anyway?`)) return;
+  if (fl.open && fl.open.src.kind === "img" && fl.open.src.id === img.id) fclose(true);
+  images.splice(images.indexOf(img), 1);
+  fl.src = null;
+  frefresh();
+});
 
 $("files-panel").addEventListener("toggle", frefresh);
 $("files-refresh").addEventListener("click", frefresh);
 $("files-edit").addEventListener("click", () => { fl.edit = !fl.edit; frefresh(); });
 $("files-src").addEventListener("change", (e) => {
-  fl.src = fsources().find((s) => `${s.kind}:${s.offset}` === e.target.value) || null;
+  fl.src = fsources().find((s) => skey(s) === e.target.value) || null;
   fl.path = "/";
   frefresh();
 });

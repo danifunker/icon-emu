@@ -2,6 +2,7 @@
 //! ended up, which I/O ports were touched but not emulated, and dump RAM or
 //! a guessed frame buffer.
 
+mod disk;
 mod serve;
 
 use icon_core::devices::nvram::presets;
@@ -249,6 +250,9 @@ fn main() {
     }
     if argv.first().map(String::as_str) == Some("serve") {
         return serve::main(argv[1..].to_vec());
+    }
+    if argv.first().map(String::as_str) == Some("disk") {
+        return disk::main(argv[1..].to_vec());
     }
     let mut args = parse_args();
     let rom = std::fs::read(&args.rom).expect("read ROM");
