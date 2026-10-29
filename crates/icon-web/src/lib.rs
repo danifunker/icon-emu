@@ -32,6 +32,138 @@ pub fn blank_floppy_640k() -> Vec<u8> {
     Disk::formatted_floppy_640k()
 }
 
+// ---- Files on a disk image, for the page's Files panel. Each call takes the
+// image and returns the changed copy; the page decides when that is safe (a
+// diskette is swapped out and back in, a hard disk only while the fileserver
+// is off). `offset` is a volume's byte offset from `disk_volumes`; `now` is
+// local wall-clock seconds, dated into 1991 as the emulated clock does.
+
+use icon_core::files::{self, qnx2fs};
+
+fn js_err(e: qnx2fs::Error) -> JsError {
+    JsError::new(&e.to_string())
+}
+
+fn json_str(s: &str) -> String {
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// The QNX volumes in a disk image, as JSON `[{"label", "offset"}]`.
+#[wasm_bindgen]
+pub fn disk_volumes(image: &[u8]) -> String {
+    let v: Vec<String> = files::volumes(image)
+        .iter()
+        .map(|v| format!("{{\"label\":{},\"offset\":{}}}", json_str(&v.label), v.offset))
+        .collect();
+    format!("[{}]", v.join(","))
+}
+
+/// A directory's entries as JSON: name, dir, size, date, attrs; plus the volume's free space.
+#[wasm_bindgen]
+pub fn disk_list(image: &[u8], offset: f64, path: &str) -> Result<String, JsError> {
+    let mut img = image.to_vec();
+    let mut vol = files::open(&mut img, offset as u64).map_err(js_err)?;
+    let mut list = vol.list(path).map_err(js_err)?;
+    list.sort_by(|a, b| (!a.is_dir, a.name.to_lowercase()).cmp(&(!b.is_dir, b.name.to_lowercase())));
+    let entries: Vec<String> = list
+        .iter()
+        .map(|e| {
+            format!(
+                "{{\"name\":{},\"dir\":{},\"size\":{},\"date\":{},\"attrs\":{}}}",
+                json_str(&e.name),
+                e.is_dir,
+                e.size,
+                json_str(&e.modified().map(qnx2fs::format_date).unwrap_or_default()),
+                json_str(&e.describe())
+            )
+        })
+        .collect();
+    Ok(format!(
+        "{{\"free\":{},\"total\":{},\"entries\":[{}]}}",
+        vol.free_blocks() * 512,
+        vol.total_blocks() * 512,
+        entries.join(",")
+    ))
+}
+
+/// A file's contents; with `text`, QNX text gets LF line endings.
+#[wasm_bindgen]
+pub fn disk_read(image: &[u8], offset: f64, path: &str, text: bool) -> Result<Vec<u8>, JsError> {
+    let mut img = image.to_vec();
+    let data = files::open(&mut img, offset as u64).and_then(|mut v| v.get(path)).map_err(js_err)?;
+    Ok(if text && qnx2fs::looks_like_rs_text(&data) { qnx2fs::rs_to_lf(&data) } else { data })
+}
+
+/// Write a file (its name must already be valid; see `qnx_name`). With `text`,
+/// host text gets QNX's line endings. With `replace`, an existing file of that
+/// name is deleted first.
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn disk_put(image: Vec<u8>, offset: f64, path: &str, data: &[u8], text: bool, replace: bool, now: f64) -> Result<Vec<u8>, JsError> {
+    let mut img = image;
+    {
+        let mut vol = files::open(&mut img, offset as u64).map_err(js_err)?;
+        vol.set_clock(icon_core::devices::rtc::icon_time(now as i64));
+        if replace {
+            if let Ok(e) = vol.lookup(path) {
+                if !e.is_dir {
+                    vol.remove(path).map_err(js_err)?;
+                }
+            }
+        }
+        let body = if text && files::looks_like_text(data) { qnx2fs::lf_to_rs(data) } else { data.to_vec() };
+        vol.put(path, &body, &qnx2fs::NewEntry::default()).map_err(js_err)?;
+    }
+    Ok(img)
+}
+
+/// Create a directory.
+#[wasm_bindgen]
+pub fn disk_mkdir(image: Vec<u8>, offset: f64, path: &str, now: f64) -> Result<Vec<u8>, JsError> {
+    let mut img = image;
+    {
+        let mut vol = files::open(&mut img, offset as u64).map_err(js_err)?;
+        vol.set_clock(icon_core::devices::rtc::icon_time(now as i64));
+        vol.mkdir(path, &qnx2fs::NewEntry::default()).map_err(js_err)?;
+    }
+    Ok(img)
+}
+
+/// Delete a file or an empty directory.
+#[wasm_bindgen]
+pub fn disk_remove(image: Vec<u8>, offset: f64, path: &str, now: f64) -> Result<Vec<u8>, JsError> {
+    let mut img = image;
+    {
+        let mut vol = files::open(&mut img, offset as u64).map_err(js_err)?;
+        vol.set_clock(icon_core::devices::rtc::icon_time(now as i64));
+        vol.remove(path).map_err(js_err)?;
+    }
+    Ok(img)
+}
+
+/// The closest valid QNX 2 file name (1-16 of A-Z a-z 0-9 _ . $).
+#[wasm_bindgen]
+pub fn qnx_name(name: &str) -> String {
+    qnx2fs::sanitize_name(name)
+}
+
+/// A hard-disk image laid out as the emulator uses it (drops the padding
+/// heads some disk readers add), so partition offsets line up.
+#[wasm_bindgen]
+pub fn normalize_hard_disk(image: Vec<u8>) -> Vec<u8> {
+    Disk::hard_auto(image).data
+}
+
 fn check_rom(rom: &[u8]) -> Result<(), JsError> {
     if rom.len() != 0x8000 {
         return Err(JsError::new("expected a 32 KB ROM image (the two 16 KB EPROMs interleaved, even bytes first)"));

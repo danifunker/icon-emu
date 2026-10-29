@@ -97,6 +97,14 @@
   .typer summary { cursor: pointer; color: var(--text); }
   .typer textarea { display: block; width: 100%; margin: 8px 0; min-height: 120px; background: #111214; color: var(--text);
                     border: 1px solid #44423b; border-radius: 6px; padding: 8px; font: 12px ui-monospace, monospace; }
+  .files-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .files select, .files .btn { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px; padding: 5px 11px; font: inherit; cursor: pointer; }
+  .files table { border-collapse: collapse; margin: 4px 0 8px; min-width: min(640px, 100%); }
+  .files td { padding: 3px 12px 3px 0; color: var(--text); white-space: nowrap; }
+  .files td.num { text-align: right; }
+  .files td button { padding: 2px 8px; }
+  .files a.dir { color: var(--text); cursor: pointer; text-decoration: underline; }
+  #files-status.err { color: var(--amber); }
   .typer button { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px; padding: 5px 11px; cursor: pointer; font: inherit; }
   .docs { margin-top: 18px; max-width: 1100px; font-size: 13px; color: var(--muted); }
   .docs h2 { font-size: 14px; color: var(--text); margin: 0 0 6px; }
@@ -209,6 +217,23 @@
     </section>
   </template>
 
+  <details class="typer files" id="files-panel">
+    <summary>Files: copy files between this computer and the diskette or hard disk</summary>
+    <div class="files-bar">
+      <select id="files-src"></select>
+      <button id="files-up" title="Up one folder">Up</button>
+      <code id="files-path">/</code>
+      <label><input id="files-upload" type="file" multiple hidden><span class="btn">Upload…</span></label>
+      <button id="files-mkdir">New folder</button>
+      <button id="files-refresh">Refresh</button>
+      <label><input id="files-text" type="checkbox" checked> convert text line endings</label>
+    </div>
+    <p id="files-status"></p>
+    <table id="files-table"></table>
+    <p>The diskette can be changed at any time: the page takes it out, makes the change and puts it back,
+    like swapping diskettes, so don't change it while the ICON is writing to it. The hard disk can only be changed
+    while the fileserver is off. Names are made to fit QNX (up to 16 letters, digits, <code>_ . $</code>).</p>
+  </details>
   <details class="typer">
     <summary>Type text into the selected machine</summary>
     Paste lines below; each is typed into the machine you last clicked, followed by Enter, one line at a time.
@@ -225,8 +250,8 @@
     <p><b>Keyboard and mouse:</b> click a machine to type on it. Click its screen to capture the mouse as the trackball;
     the mouse buttons are the two ACTION keys. <b>Ctrl+Alt</b> (or Esc) lets go.
     F11 / F12 = ACTION, Insert = HELP, Delete = RUBOUT, Scroll Lock = CURSOR LOCK, Home = CLR.</p>
-    <p><b>Diskettes:</b> <b>New blank</b> inserts an empty, formatted 640K diskette. Copy files to it (drive <code>[1]2:</code>)
-    and use <b>Download .img</b> to take them to your computer. See <a href="https://github.com/danifunker/icon-emu/blob/main/docs/ADMIN.md#moving-files-in-and-out-with-diskettes">moving files in and out</a>.</p>
+    <p><b>Files:</b> open <b>Files</b> above to copy files between this computer and the diskette or hard disk.
+    <b>New blank</b> inserts an empty, formatted 640K diskette. See <a href="https://github.com/danifunker/icon-emu/blob/main/docs/ADMIN.md#moving-files-in-and-out">moving files in and out</a>.</p>
     <p><b>Hard disk:</b> saved in this browser automatically; download a copy after each step you care about.
     A new or loaded disk is used from the fileserver's next power-on.</p>
     <p><b>Rel 2.11 ROM:</b> its workstations need system software <b>4.10.05</b> on the fileserver

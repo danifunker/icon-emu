@@ -44,11 +44,17 @@ fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
+/// Host time as the emulated ICON sees it: the same month, day and time of
+/// day, in 1991 (1992 when the host year is a leap year).
+pub fn icon_time(host_unix_secs: i64) -> i64 {
+    let (y, m, d) = civil_from_days(host_unix_secs.div_euclid(86_400));
+    let target = if is_leap(y) { 1992 } else { 1991 };
+    days_from_civil(target, m, d) * 86_400 + host_unix_secs.rem_euclid(86_400)
+}
+
 impl Msm5832 {
     pub fn new(host_unix_secs: i64) -> Self {
-        let (y, m, d) = civil_from_days(host_unix_secs.div_euclid(86_400));
-        let target = if is_leap(y) { 1992 } else { 1991 };
-        let shifted = days_from_civil(target, m, d) * 86_400 + host_unix_secs.rem_euclid(86_400);
+        let shifted = icon_time(host_unix_secs);
         Self { host_epoch: host_unix_secs, offset: shifted - host_unix_secs, regs: [0; 13] }
     }
 

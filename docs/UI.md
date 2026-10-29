@@ -66,7 +66,7 @@ The fileserver has the network's only diskette drive.
 | **Eject** | Take the diskette out |
 | **Download .img** | Save the diskette to your computer, with everything written to it. After an eject, it saves the diskette you just took out |
 
-When the fileserver has started from its hard disk, the diskette is **drive 2** (`2:` on the fileserver, `[1]2:` from a workstation). [The administrator notes](ADMIN.md#moving-files-in-and-out-with-diskettes) explain how to copy files to and from it.
+When the fileserver has started from its hard disk, the diskette is **drive 2** (`2:` on the fileserver, `[1]2:` from a workstation).
 
 If a diskette is in the drive when the fileserver is switched on, the fileserver tries to start from it. A system boot diskette makes it start from the diskette; a blank or data diskette is skipped and it starts from the hard disk.
 
@@ -82,6 +82,17 @@ If a diskette is in the drive when the fileserver is switched on, the fileserver
 The hard disk is saved in your browser every few seconds and when the fileserver is switched off, so it survives reloading the page. Download a copy after each important step anyway; browser storage can be cleared.
 
 A new or loaded hard disk is used from the next time the fileserver is switched on.
+
+## Files
+
+**Files** (below the machines) copies files between your computer and the ICON's diskette or hard disk, without using the ICON itself.
+
+- Pick **Diskette** or **Hard disk** in the menu. Click a folder to open it; **Up** goes back.
+- **Upload…** copies files from your computer into the open folder. **Download** saves one to your computer. **New folder** and **Delete** do what they say.
+- **convert text line endings** turns the ICON's line endings into ordinary ones and back. Leave it ticked; binary files are left alone.
+- The diskette can be changed at any time. The hard disk can only be changed while the fileserver is off.
+
+The [administrator notes](ADMIN.md#moving-files-in-and-out) have the details.
 
 ## Sound and version
 

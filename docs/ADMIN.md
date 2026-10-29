@@ -32,11 +32,27 @@ QNX 2 has no `/home`. Paths name a node and a drive:
 | `/dos` | QDOS pseudo-disks: `MSDOS.pf` (MS-DOS 3.2 boot), `work.ph` (student work disk) |
 | `/sys`, `/boot` | System tasks and network boot images |
 
-## Moving files in and out with diskettes
+## Moving files in and out
 
-The fileserver's diskette drive is the way to get files between the ICON and your own computer. Diskettes are image files (`.img`) on your computer.
+### With the Files panel (easiest)
 
-**Copying files off the ICON:**
+Open **Files** below the machines on the web page. It shows the files on the diskette or the hard disk, and copies them to and from your computer directly.
+
+1. Pick **Diskette** or **Hard disk** in the menu. Click a folder to open it, **Up** to go back.
+2. **Upload…** copies files from your computer into the folder you're in. **Download** copies a file to your computer. **New folder** and **Delete** do what they say.
+3. Keep **convert text line endings** ticked for text files. QNX 2 ends each line with an RS character (0x1E) where other systems use a newline; the panel converts both ways. Untick it for programs and other binary files. (Binary files are left alone either way.)
+
+Rules:
+- **The diskette** can be changed at any time. The page takes it out, makes the change and puts it back, like swapping diskettes by hand. Don't do it while the ICON is writing to the diskette.
+- **The hard disk** can only be changed while the fileserver is **switched off**. QNX keeps parts of the disk in memory and would write over the change. While it's on, the panel shows the disk as last saved, read-only.
+- **Names** must fit QNX: up to 16 letters, digits, `_`, `.` or `$`. Other characters become `_`, and long names are shortened. The panel says when it renames something.
+- Uploaded files are dated with the emulated ICON clock: today's date in 1991, as files the ICON writes itself.
+
+To give a student a file, upload it straight into their home folder on the hard disk (`/user/<login>`) with the fileserver off. Or put it on a diskette and have them `copy [1]2:/name name`.
+
+### With diskette images
+
+Diskette images also work with other tools, such as [RustyBackup](https://github.com/danifunker/rusty-backup)'s `rb-cli`.
 
 1. Under the fileserver, click **New blank**. This inserts an empty 640K diskette that is already formatted.
 2. Copy files onto it. From a workstation the diskette is `[1]2:`. Give the copy a file name, not just the drive:
@@ -45,21 +61,12 @@ The fileserver's diskette drive is the way to get files between the ICON and you
    files [1]2:/
    ```
 3. Click the diskette's **Download .img** to save it to your computer.
-4. Read it with [RustyBackup](https://github.com/danifunker/rusty-backup)'s `rb-cli`:
+4. Read it, or add files to it, with `rb-cli`:
    ```
    rb-cli ls blank-640k.img /
    rb-cli get --rs-to-lf blank-640k.img /story story.txt
    ```
-   `--rs-to-lf` converts the line endings. QNX 2 ends each line with an RS character (0x1E) where other systems use a newline.
-
-**Copying files onto the ICON:**
-- **From an ICON diskette image** (for example one dumped from a real ICON): click **Insert…**, then `copy [1]2:/name 1:/user/alice/name`.
-- **Short text files:** paste the text into **Type text into the selected machine**, one `echo` line per line of text:
-  ```
-  echo first line >1:/user/alice/notes
-  echo second line >>1:/user/alice/notes
-  ```
-- **Any file from your computer:** this needs a tool that writes QNX 2 diskettes. RustyBackup reads them but can't write them yet.
+5. To bring files in, **Insert…** the diskette image, then `copy [1]2:/name 1:/user/alice/name`.
 
 To prepare a blank diskette yourself instead of using **New blank**, insert any empty 640K image and run `dinit 2` on the fileserver. Press Enter when it asks you to place the disk in the drive.
 

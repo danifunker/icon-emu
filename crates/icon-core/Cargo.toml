@@ -6,3 +6,4 @@ license.workspace = true
 description = "Emulator core for the Unisys/CEMCORP ICON and LEXICON (80186)"
 
 [dependencies]
+qnx2fs = { path = "../../../qnx2fs" }

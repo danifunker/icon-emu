@@ -12,7 +12,7 @@ It emulates the ICON's 80186 main board well enough to run the original boot ROM
 
 1. Open the page and click **Load ROM…**. Pick the 32 KB ROM image, or select both 16 KB EPROM files at once. The ROM stays in your browser; it is never uploaded.
 2. Follow [the rebuild guide](docs/REBUILD.md) to install the system onto a hard disk and boot a workstation.
-3. [The web page guide](docs/UI.md) explains every button.
+3. [The web page guide](docs/UI.md) explains every button, including **Files**, which copies files between your computer and the ICON's disks.
 
 ## Documentation
 
@@ -21,7 +21,7 @@ It emulates the ICON's 80186 main board well enough to run the original boot ROM
 | [Using the web page](docs/UI.md) | The controls: ROMs, memory, power, keyboard and trackball, diskettes, hard disks |
 | [Rebuilding a network from scratch](docs/REBUILD.md) | Which diskettes to use, in which order, from an empty hard disk to a working network with student accounts |
 | [Installing in detail](docs/INSTALL.md) | The install, step by step, for 10 MB and 64 MB hard disks, and adding packages |
-| [Administrator notes](docs/ADMIN.md) | Drives and paths, user accounts, moving files in and out on diskettes, speech, MS-DOS, shutting down |
+| [Administrator notes](docs/ADMIN.md) | Drives and paths, user accounts, moving files in and out, speech, MS-DOS, shutting down |
 | [Headless mode](docs/HEADLESS.md) | Running and scripting the emulator from the command line |
 
 The hardware notes ([COM9026 network chip](docs/com9026.md), [keyboard, trackball and display](docs/input_video.md), [NVRAM, clock and disk](docs/nvram_rtc_disk_install.md)) are reference material for developers.
@@ -59,6 +59,7 @@ Neither license covers the ICON ROM, QNX, or any Unisys/CEMCORP software.
 - **SingleStepTests** by Daniel Balsom (MIT): the 8086/80286 test suites used to check the CPU core. They are downloaded by `scripts/fetch_cpu_tests.py` and not included. <https://github.com/SingleStepTests>
 - **York University Computer Museum (YUCoM)**: preserved and supplied the ICON ROM dumps, manuals and system diskettes this work is based on.
 - **Alan's Hyperion emulator** inspired the look of the web page, with each machine drawn in HTML/CSS. <https://github.com/alanswx/Hyperion>
+- **[qnx2fs](https://github.com/danifunker/qnx2fs)** (MIT) reads and writes the ICON's QNX 2 disks for the Files panel. It is shared with RustyBackup.
 - **Standard Microsystems (SMSC)**: the COM9026 datasheet, used to model the network controller.
 
 ICON, LEXICON and Unisys are trademarks of their respective owners. QNX is a trademark of BlackBerry Limited (originally Quantum Software Systems). This project is not affiliated with any of them.

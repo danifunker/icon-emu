@@ -1,4 +1,7 @@
-import init, { Network, blank_hard_disk_10mb, blank_floppy_640k } from "./pkg/icon_web.js";
+import init, {
+  Network, blank_hard_disk_10mb, blank_floppy_640k,
+  disk_volumes, disk_list, disk_read, disk_put, disk_mkdir, disk_remove, qnx_name, normalize_hard_disk,
+} from "./pkg/icon_web.js";
 
 const FS = 0;
 const $ = (id) => document.getElementById(id);
@@ -280,6 +283,7 @@ $("hd-new").addEventListener("click", () => {
   hardDisk = { name: "lexicon-10mb.img", data: blank_hard_disk_10mb() };
   idbPut("fileserver-hd", hardDisk);
   showHd(net && net.is_on(FS) ? "attached at next power-on" : "");
+  frefresh();
 });
 // A factory-formatted 64 MB drive: blocks written by hdformat/fdisk/dinit on
 // the emulated LEXICON, stored sparsely ("ICONHD64", size, then u32 block +
@@ -295,6 +299,7 @@ $("hd-new64").addEventListener("click", async () => {
   hardDisk = { name: "lexicon-64mb.img", data };
   idbPut("fileserver-hd", hardDisk);
   showHd(net && net.is_on(FS) ? "attached at next power-on" : "");
+  frefresh();
 });
 $("hd-load").addEventListener("change", async (e) => {
   const file = e.target.files[0];
@@ -302,6 +307,7 @@ $("hd-load").addEventListener("change", async (e) => {
   hardDisk = { name: file.name, data: new Uint8Array(await file.arrayBuffer()) };
   idbPut("fileserver-hd", hardDisk);
   showHd(net && net.is_on(FS) ? "attached at next power-on" : "");
+  frefresh();
   e.target.value = "";
 });
 $("hd-download").addEventListener("click", () => {
@@ -339,6 +345,7 @@ function insertFloppy(f) {
   if (net && net.is_on(FS)) {
     try { net.insert_floppy(f.data); } catch (err) { alert(err); }
   }
+  frefresh();
 }
 $("floppy-new").addEventListener("click", () => {
   syncFloppy();
@@ -363,6 +370,7 @@ $("eject").addEventListener("click", () => {
   $("floppy-name").textContent = "no diskette";
   $("slot0").classList.remove("loaded");
   if (net && net.is_on(FS)) net.eject_floppy();
+  frefresh();
 });
 
 // ---- Power
@@ -375,6 +383,7 @@ function power(slot) {
     if (slot === FS) syncFloppy();
     if (slot === FS && hardDisk) { syncHd(); idbPut("fileserver-hd", hardDisk); }
     net.power_off(slot);
+    if (slot === FS) frefresh();
     m.power.classList.remove("on");
     m.ctx.fillRect(0, 0, 640, 240);
     m.status.textContent = "off";
@@ -392,6 +401,7 @@ function power(slot) {
   }
   m.power.classList.add("on");
   m.power.blur();
+  if (slot === FS) frefresh();
   setFocus(slot);
 }
 
@@ -546,6 +556,166 @@ $("rom-same").addEventListener("change", (e) => {
   sameRom = e.target.checked;
   local.set("icon-emu.same-rom", sameRom ? "1" : "0");
   showRoms(applyRoms());
+});
+
+// ---- Files: copy files between this computer and the ICON's disks (the
+// qnx2fs crate, inside the emulator). The diskette can be changed at any time:
+// take it out, edit it, put it back, as when swapping diskettes. The hard disk
+// only while the fileserver is off, since QNX caches it and would overwrite
+// the change.
+const fl = { src: null, path: "/" }; // src: { kind: "fd" | "hd", offset, label }
+const fstatus = (msg, err = false) => { $("files-status").textContent = msg; $("files-status").classList.toggle("err", err); };
+function hdImage() {
+  syncHd();
+  if (!hardDisk.normalized) { hardDisk.data = normalize_hard_disk(hardDisk.data); hardDisk.normalized = true; }
+  return hardDisk.data;
+}
+function fimage(src) {
+  if (src.kind === "fd") { syncFloppy(); return floppy.data; }
+  return hdImage();
+}
+function fsources() {
+  const out = [];
+  if (floppy) for (const v of JSON.parse(disk_volumes(floppy.data))) out.push({ kind: "fd", offset: v.offset, label: "Diskette" });
+  if (hardDisk) for (const v of JSON.parse(disk_volumes(hdImage()))) out.push({ kind: "hd", offset: v.offset, label: `Hard disk, ${v.label}` });
+  return out;
+}
+// Apply a change to the selected disk: `edit(image) -> new image`.
+function fedit(edit) {
+  const src = fl.src;
+  if (src.kind === "hd" && net && net.is_on(FS)) throw new Error("Switch the fileserver off before changing its hard disk.");
+  const data = edit(fimage(src));
+  if (src.kind === "fd") {
+    floppy.data = data;
+    if (net && net.is_on(FS)) net.insert_floppy(data);
+  } else {
+    hardDisk.data = data;
+    idbPut("fileserver-hd", hardDisk);
+    showHd("changed in Files");
+  }
+}
+const fjoin = (dir, name) => (dir === "/" ? "/" : dir + "/") + name;
+function frefresh() {
+  if (!$("files-panel").open) return;
+  const srcs = fsources();
+  const sel = $("files-src");
+  const key = (s) => `${s.kind}:${s.offset}`;
+  const keep = fl.src && srcs.find((s) => key(s) === key(fl.src));
+  fl.src = keep || srcs[0] || null;
+  if (!keep) fl.path = "/";
+  sel.replaceChildren(...srcs.map((s) => new Option(s.label, key(s), false, fl.src && key(s) === key(fl.src))));
+  $("files-path").textContent = fl.path;
+  const table = $("files-table");
+  table.replaceChildren();
+  if (!fl.src) {
+    fstatus(floppy || hardDisk
+      ? "No ICON (QNX) files found. A diskette must be formatted for the ICON: New blank gives you one."
+      : "Insert a diskette (New blank gives an empty one) or add a hard disk first.");
+    return;
+  }
+  let list;
+  try { list = JSON.parse(disk_list(fimage(fl.src), fl.src.offset, fl.path)); }
+  catch (e) { fl.path = "/"; fstatus(e.message, true); return; }
+  const kb = (n) => `${Math.round(n / 1024)} KB`;
+  let note = `${list.entries.length} items · ${kb(list.free)} free of ${kb(list.total)}`;
+  if (fl.src.kind === "hd" && net && net.is_on(FS)) note += " · the fileserver is on: this shows the disk as last saved, and it can't be changed";
+  fstatus(note);
+  for (const e of list.entries) {
+    const tr = table.insertRow();
+    const name = tr.insertCell();
+    if (e.dir) {
+      const a = document.createElement("a");
+      a.className = "dir";
+      a.textContent = e.name + "/";
+      a.addEventListener("click", () => { fl.path = fjoin(fl.path, e.name); frefresh(); });
+      name.append(a);
+    } else name.textContent = e.name;
+    name.title = e.attrs;
+    const size = tr.insertCell();
+    size.className = "num";
+    size.textContent = e.dir ? "" : e.size.toLocaleString();
+    tr.insertCell().textContent = e.date;
+    const act = tr.insertCell();
+    if (!e.dir) {
+      const b = document.createElement("button");
+      b.textContent = "Download";
+      b.addEventListener("click", () => fdownload(e.name));
+      act.append(b);
+    }
+    if (e.name !== "bitmap" || fl.path !== "/") {
+      const b = document.createElement("button");
+      b.textContent = "Delete";
+      b.addEventListener("click", () => fdelete(e));
+      act.append(" ", b);
+    }
+  }
+}
+function fdownload(name) {
+  try {
+    const data = disk_read(fimage(fl.src), fl.src.offset, fjoin(fl.path, name), $("files-text").checked);
+    const url = URL.createObjectURL(new Blob([data], { type: "application/octet-stream" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) { fstatus(e.message, true); }
+}
+function fdelete(e) {
+  if (!confirm(`Delete ${fjoin(fl.path, e.name)}?`)) return;
+  try {
+    fedit((img) => disk_remove(img, fl.src.offset, fjoin(fl.path, e.name), localTime()));
+    frefresh();
+  } catch (err) { fstatus(err.message.includes("not empty") ? "Delete the folder's files first." : err.message, true); }
+}
+$("files-panel").addEventListener("toggle", frefresh);
+$("files-refresh").addEventListener("click", frefresh);
+$("files-src").addEventListener("change", (e) => {
+  fl.src = fsources().find((s) => `${s.kind}:${s.offset}` === e.target.value) || null;
+  fl.path = "/";
+  frefresh();
+});
+$("files-up").addEventListener("click", () => {
+  fl.path = fl.path.replace(/\/[^/]*$/, "") || "/";
+  frefresh();
+});
+$("files-mkdir").addEventListener("click", () => {
+  if (!fl.src) return;
+  const asked = prompt("Name of the new folder:");
+  if (!asked) return;
+  const name = qnx_name(asked);
+  try {
+    fedit((img) => disk_mkdir(img, fl.src.offset, fjoin(fl.path, name), localTime()));
+    frefresh();
+    if (name !== asked) fstatus(`Created ${name} (names must fit QNX).`);
+  } catch (e) { fstatus(e.message, true); }
+});
+$("files-upload").addEventListener("change", async (e) => {
+  const list = [...e.target.files];
+  e.target.value = "";
+  if (!fl.src || !list.length) return;
+  const text = $("files-text").checked;
+  const done = [], renamed = [];
+  try {
+    for (const f of list) {
+      const name = qnx_name(f.name);
+      const path = fjoin(fl.path, name);
+      const data = new Uint8Array(await f.arrayBuffer());
+      try {
+        fedit((img) => disk_put(img, fl.src.offset, path, data, text, false, localTime()));
+      } catch (err) {
+        if (!err.message.startsWith("already exists") || !confirm(`${path} already exists. Replace it?`)) throw err;
+        fedit((img) => disk_put(img, fl.src.offset, path, data, text, true, localTime()));
+      }
+      done.push(name);
+      if (name !== f.name) renamed.push(`${f.name} → ${name}`);
+    }
+    frefresh();
+    fstatus(`Copied ${done.length} file${done.length === 1 ? "" : "s"}.` + (renamed.length ? ` Renamed to fit QNX: ${renamed.join(", ")}.` : ""));
+  } catch (err) {
+    frefresh();
+    fstatus((done.length ? `Copied ${done.join(", ")}; then: ` : "") + err.message, true);
+  }
 });
 
 // ---- Type text: one line at a time into the focused machine, each followed
