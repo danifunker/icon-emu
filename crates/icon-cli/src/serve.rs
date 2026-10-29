@@ -58,6 +58,7 @@ pub fn main(argv: Vec<String>) {
         rig.workstation_rom = Some(ws);
     }
     rig.ram_kb = ram_kb;
+    rig.clock = crate::local_now;
     let mut server = Server { rig, hd, floppy, quit: false };
     let _ = std::fs::remove_file(&socket);
     let listener = UnixListener::bind(&socket).unwrap_or_else(|e| panic!("bind {socket}: {e}"));
@@ -74,8 +75,9 @@ pub fn main(argv: Vec<String>) {
     let _ = std::fs::remove_file(&socket);
 }
 
+/// Local wall-clock time, as the ICON keeps it (see `crate::local_now`).
 fn now_secs() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+    crate::local_now()
 }
 
 impl Server {

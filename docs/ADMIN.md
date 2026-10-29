@@ -139,6 +139,8 @@ House has its own QNX shell window, so this keeps students out of the prompt *af
 
 The ICON stores dates with a 4-bit year, so it can only hold **1980 to 1995**. The emulator therefore runs the ICON's clock on **today's month, day and time, in 1994**. On 29 February, which 1994 doesn't have, it uses **1992**. 1994 sorts after all the ICON system software (the last release is from 1991), and a machine left running past New Year's Eve moves into 1995, which the ICON can still store.
 
+The ICON's clock has no time zone; the emulator gives it **your local time**, both on the web page and in headless mode. Dates copied out to your computer (`icon-cli disk get`) are read the same way, so a file the ICON dated 5:04 pm shows 5:04 pm on your computer.
+
 **Check the date when a machine starts.** The login screen shows the date the ICON is using, for example `October 29 1994  4:35 pm`. Everything QNX writes, and every file you upload or save in the Files panel, gets that date. Files copied between ICON disks keep their original dates. The same rule is used by RustyBackup and the `qnx2fs` crate when they write modern files to ICON disks.
 
 ## Sending a message to everyone

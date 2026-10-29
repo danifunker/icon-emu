@@ -216,7 +216,7 @@ fn session_main(argv: Vec<String>) {
         eprintln!("session error: {e}");
         std::process::exit(1)
     };
-    let mut s = Session::fileserver(&rom, hd, fd).unwrap_or_else(|e| fail(e));
+    let mut s = Session::fileserver_with_clock(&rom, hd, fd, local_now).unwrap_or_else(|e| fail(e));
     s.login(&user, &pass).unwrap_or_else(|e| fail(e));
     for (kind, arg) in steps {
         match kind.as_str() {
@@ -264,7 +264,7 @@ fn main() {
     presets::set_ram_kb(&mut nvram, args.ram_kb);
     let fs = args.preset == "fs";
     let _ = fs;
-    let mut m = Machine::new(Config { rom, patch_800k_floppy: false, ram_kb: args.ram_kb, nvram, straps: args.straps, host_time: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0), disk_controller: fs });
+    let mut m = Machine::new(Config { rom, patch_800k_floppy: false, ram_kb: args.ram_kb, nvram, straps: args.straps, host_time: local_now(), disk_controller: fs });
     if let Some(p) = &args.floppy {
         let d = Disk::floppy_from_image(std::fs::read(p).expect("read floppy")).expect("unknown floppy size");
         m.board.insert_floppy(Some(d));
@@ -660,5 +660,14 @@ fn save_hd(lan: &icon_core::lan::Lan, off: Option<&Machine>, path: &str) {
 }
 
 fn now_secs() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+    local_now()
+}
+
+/// The host's **local** wall-clock time as Unix-style seconds, which is how
+/// the ICON kept time (no time zone). Every clock the CLI gives the emulator
+/// comes from here; `rtc::icon_time` then folds it into 1994. The web page
+/// does the same with the browser's local time, and RustyBackup reads ICON
+/// dates as local time too.
+pub(crate) fn local_now() -> i64 {
+    chrono::Local::now().naive_local().and_utc().timestamp()
 }

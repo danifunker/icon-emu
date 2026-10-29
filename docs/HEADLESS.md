@@ -69,7 +69,7 @@ These copy files between your computer and the ICON's disks directly, without ty
 - **Writing the hard disk** only works while **every machine is off** (`power N off`, or before the first `power`). The fileserver caches the disk and would overwrite the change, so the server refuses while anything is on, and says which slots are.
 - `--text` converts text both ways: UTF-8 with LF line ends on your side; RS (0x1E) line ends, Telidon accents (é is `0x19 0x42 e`), code page 437 and the underline codes `0x99` / `0x9A` on the ICON's. Characters the ICON can't store are refused. Binary files are left alone.
 - File names must fit QNX: 1 to 16 of `A-Z a-z 0-9 _ . $`.
-- Files are dated with the emulated clock: today's date in 1994, or 1992 on 29 February (see the administrator notes, Dates). Files copied with `cp` keep their dates.
+- Files are dated with the emulated clock: today's date in 1994, or 1992 on 29 February, at your local time (see the administrator notes, Dates). Files copied with `cp` keep their dates.
 - `floppy-new` gives you a formatted diskette to `put` files on.
 
 ### Without a running machine: `icon-cli disk`

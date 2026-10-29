@@ -73,9 +73,16 @@ pub struct Rig {
     /// Emulated seconds allowed for a boot / a single command.
     pub boot_timeout: f64,
     pub command_timeout: f64,
+    /// The host clock as the ICON should read it: **local** wall-clock time,
+    /// as Unix-style seconds (the ICON had no time zone). The fileserver's
+    /// clock starts from it at power-on, folded into 1994 (`rtc::icon_time`).
+    /// The default is UTC, since the core has no time-zone data; `icon-cli`
+    /// sets local time, and the web page passes the browser's.
+    pub clock: fn() -> i64,
 }
 
-fn host_time() -> i64 {
+/// UTC seconds: the default `Rig::clock` (the core has no time-zone data).
+pub fn utc_now() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
@@ -92,6 +99,7 @@ impl Rig {
             workstation_rom: None,
             consoles: (0..slots).map(|_| Console::default()).collect(),
             ram_kb: 512,
+            clock: utc_now,
             boot_timeout: 180.0,
             command_timeout: 300.0,
         })
@@ -121,7 +129,7 @@ impl Rig {
             ram_kb: self.ram_kb,
             nvram,
             straps: STRAPS_NORMAL,
-            host_time: host_time(),
+            host_time: (self.clock)(),
             disk_controller: true,
         });
         if let Some(hd) = hard_disk {
@@ -150,7 +158,7 @@ impl Rig {
             ram_kb: self.ram_kb,
             nvram: nv,
             straps: STRAPS_NORMAL,
-            host_time: host_time(),
+            host_time: (self.clock)(),
             disk_controller: false,
         });
         self.lan.power_on(slot, m);
@@ -359,7 +367,12 @@ pub struct Session {
 impl Session {
     /// Power on a LEXICON fileserver and wait for `Login:`.
     pub fn fileserver(rom: &[u8], hard_disk: Option<Vec<u8>>, floppy: Option<Vec<u8>>) -> Result<Self, SessionError> {
+        Self::fileserver_with_clock(rom, hard_disk, floppy, utc_now)
+    }
+    /// The same, with the host clock to start the ICON's clock from (see `Rig::clock`).
+    pub fn fileserver_with_clock(rom: &[u8], hard_disk: Option<Vec<u8>>, floppy: Option<Vec<u8>>, clock: fn() -> i64) -> Result<Self, SessionError> {
         let mut rig = Rig::new(rom, 0)?;
+        rig.clock = clock;
         rig.power_on_fileserver(hard_disk, floppy)?;
         rig.wait_login(FILESERVER)?;
         Ok(Session { rig })

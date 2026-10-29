@@ -32,7 +32,7 @@ fn local_to_system_time(t: i64) -> Option<std::time::SystemTime> {
 }
 
 fn now() -> i64 {
-    icon_time(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0))
+    icon_time(crate::local_now())
 }
 
 pub fn main(argv: Vec<String>) {
