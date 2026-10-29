@@ -6,4 +6,4 @@ license.workspace = true
 description = "Emulator core for the Unisys/CEMCORP ICON and LEXICON (80186)"
 
 [dependencies]
-qnx2fs = { git = "https://github.com/danifunker/qnx2fs" }
+qnx2fs = "0.1"

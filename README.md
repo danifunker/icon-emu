@@ -59,7 +59,7 @@ Neither license covers the ICON ROM, QNX, or any Unisys/CEMCORP software.
 - **SingleStepTests** by Daniel Balsom (MIT): the 8086/80286 test suites used to check the CPU core. They are downloaded by `scripts/fetch_cpu_tests.py` and not included. <https://github.com/SingleStepTests>
 - **York University Computer Museum (YUCoM)**: preserved and supplied the ICON ROM dumps, manuals and system diskettes this work is based on.
 - **Alan's Hyperion emulator** inspired the look of the web page, with each machine drawn in HTML/CSS. <https://github.com/alanswx/Hyperion>
-- **[qnx2fs](https://github.com/danifunker/qnx2fs)** (MIT) reads and writes the ICON's QNX 2 disks for the Files panel. It is shared with RustyBackup.
+- **[qnx2fs](https://crates.io/crates/qnx2fs)** (MIT) reads and writes the ICON's QNX 2 disks for the Files panel. It is shared with RustyBackup.
 - **Standard Microsystems (SMSC)**: the COM9026 datasheet, used to model the network controller.
 
 ICON, LEXICON and Unisys are trademarks of their respective owners. QNX is a trademark of BlackBerry Limited (originally Quantum Software Systems). This project is not affiliated with any of them.
