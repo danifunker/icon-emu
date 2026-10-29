@@ -13,7 +13,7 @@ The boot ROM is not in this repo. `serve` reads `--rom FILE`, and defaults to `~
 ## Start the server
 
 ```
-icon-cli serve [--socket /tmp/icon.sock] [--rom FILE] [--fs-rom FILE] [--ws-rom FILE] [--hd IMG] [--floppy IMG] [--workstations N]
+icon-cli serve [--socket /tmp/icon.sock] [--rom FILE] [--fs-rom FILE] [--ws-rom FILE] [--hd IMG] [--floppy IMG] [--workstations N] [--ram-kb 512|1024]
 ```
 
 - The socket can also be set with `ICON_CI_SOCKET`. Keep the path short, because Unix socket paths are limited to about 100 bytes.

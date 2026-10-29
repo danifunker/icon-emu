@@ -90,6 +90,8 @@
   .rom .label { font-weight: 600; }
   .rom .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; width: 100%; }
   .rom .row[hidden] { display: none; }
+  .rom select { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 13px; }
+  .rom .warn { color: var(--amber); }
   .rom.missing { background: #3a2c16; border: 1px solid var(--amber); border-radius: 8px; padding: 10px 12px; }
   .typer { margin-top: 18px; max-width: 1100px; color: var(--muted); font-size: 13px; }
   .typer summary { cursor: pointer; color: var(--text); }
@@ -124,6 +126,14 @@
     <div class="row">
       <label class="sub"><input id="rom-same" type="checkbox" checked> Use the same ROM for all devices</label>
       <span id="rom-note" class="sub"></span>
+    </div>
+    <div class="row" id="ram-row">
+      <label class="label" for="ram">Memory</label>
+      <select id="ram">
+        <option value="512">512 KB (main board)</option>
+        <option value="1024">1 MB (CEMCORP upgrade card)</option>
+      </select>
+      <span id="ram-note" class="sub">1 MB needs the Rel 2.11 boot ROM; the 5053 ISS 2 ROM can't use the card.</span>
     </div>
   </div>
   <template id="rom-row-template">
@@ -212,6 +222,8 @@
     <b>Workstations with the Rel 2.11 boot ROM need ICON System Software 4.10.05</b> on the fileserver:
     the 4.10.01 workstation boot image crashes under that ROM. Install the 4.10.05 upgrade diskette with
     <code>configure</code> (see <a href="https://github.com/danifunker/icon-emu/blob/main/docs/REBUILD.md">the rebuild guide</a>, section 2b). The 5053 ISS 2 ROM works with either.
+    <b>Memory: 1 MB</b> fits the CEMCORP "1 MEG ICON UPGRADE BOARD" to every machine at its next power-on. Only the
+    Rel 2.11 ROM supports it (the 5053 ISS 2 ROM fails to network-boot, error 57); the kernel then reports about 969 KB.
     To install: insert the <b>ICON Fileserver Boot Diskette</b> (4.01.00), add a hard disk, power on the fileserver and
     wait for <code>Login:</code>, then power on a workstation.
     Log in as <code>root</code> / <code>superuser</code>. Click a machine to give it the keyboard.

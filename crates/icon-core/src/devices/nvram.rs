@@ -164,6 +164,22 @@ impl Nvram {
 /// Words 1-4 serial number, 5-9 CRTC R0-R9, 10 node/boot server,
 /// 11 palette, 12 boot-file selector, 13 monitor, 14-15 unused.
 pub mod presets {
+    /// Set word 0's memory size: bits 0-1 count the extra 128 KB banks when
+    /// bit 11 is set; bit 11 clear with bits 0-1 = 1 is the 1 MB upgrade card.
+    /// For 1 MB this also sets bit 10: the Rel 2.11 ROM then finds the
+    /// COM9026 RAM through the mid-range chip selects (F7000), the only
+    /// 1 MB layout emulated (bit 10 clear runs the ROM from a RAM copy).
+    pub fn set_ram_kb(nv: &mut [u16; 16], kb: u32) {
+        let w = nv[0] & !0x0803;
+        nv[0] = match kb {
+            1024 => w | 0x0401,
+            128 => w | 0x0803,
+            256 => w | 0x0800,
+            384 => w | 0x0801,
+            _ => w | 0x0802,
+        };
+    }
+
     /// ICON fileserver, node 1: floppy then hard disk, 512 KB.
     pub fn fileserver() -> [u16; 16] {
         [

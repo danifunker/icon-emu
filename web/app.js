@@ -418,6 +418,7 @@ for (const [kind, k] of Object.entries(KINDS)) {
   $("rom-bar").append(row);
   romRows[kind] = row;
 }
+$("rom-bar").append($("ram-row"));
 async function sha1(data) {
   const h = new Uint8Array(await crypto.subtle.digest("SHA-1", data));
   return Array.from(h, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -441,7 +442,35 @@ async function showRoms(note) {
       : key === "shared" ? (sameRom ? "none loaded. Choose the ICON boot ROM to start." : "none")
       : roms.shared ? `none of its own: using ${roms.shared.name}` : "none loaded";
   }
+  showRam();
 }
+
+// ---- Memory: 512 KB, or the CEMCORP 1 MB upgrade card, which only the
+// Rel 2.11 ROM drives (it programs the card's port and the chip selects).
+const REL_2_11 = "3750cf6f203fe1a167b853e36d30114701b039eb";
+let ramKb = local.get("icon-emu.ram-kb") === "1024" ? 1024 : 512;
+async function showRam() {
+  $("ram").value = String(ramKb);
+  const note = $("ram-note");
+  let other = [];
+  if (ramKb === 1024) {
+    for (const [kind, k] of Object.entries(KINDS)) {
+      const r = effectiveRom(kind);
+      if (r && (await sha1(r.data)) !== REL_2_11) other.push(k.label);
+    }
+  }
+  note.classList.toggle("warn", other.length > 0);
+  note.textContent = other.length
+    ? `1 MB needs the Rel 2.11 boot ROM: the ${other.join(" and ")} ROM can't use the card and won't boot.`
+    : "1 MB needs the Rel 2.11 boot ROM; the 5053 ISS 2 ROM can't use the card.";
+  if (ramKb === 1024 && !other.length) note.textContent += " Takes effect at each machine's next power-on.";
+}
+$("ram").addEventListener("change", (e) => {
+  ramKb = e.target.value === "1024" ? 1024 : 512;
+  local.set("icon-emu.ram-kb", String(ramKb));
+  if (net) net.set_ram_kb(ramKb);
+  showRam();
+});
 // Hand the current ROMs to the emulator; running machines keep theirs until power-off.
 function applyRoms() {
   let running = false;
@@ -570,6 +599,7 @@ if (!roms.shared) {
     }
   } catch {}
 }
+net.set_ram_kb(ramKb);
 applyRoms();
 showRoms(note);
 try {

@@ -67,6 +67,9 @@ pub struct Rig {
     /// A different boot ROM for the workstations (default: the same one).
     pub workstation_rom: Option<Vec<u8>>,
     consoles: Vec<Console>,
+    /// Memory of every machine powered on: 512, or 1024 for the 1 MB upgrade
+    /// card (needs the Rel 2.11 ROM).
+    pub ram_kb: u32,
     /// Emulated seconds allowed for a boot / a single command.
     pub boot_timeout: f64,
     pub command_timeout: f64,
@@ -88,6 +91,7 @@ impl Rig {
             rom: rom.to_vec(),
             workstation_rom: None,
             consoles: (0..slots).map(|_| Console::default()).collect(),
+            ram_kb: 512,
             boot_timeout: 180.0,
             command_timeout: 300.0,
         })
@@ -109,11 +113,13 @@ impl Rig {
     /// boots from the hard disk (the floppy is then QNX drive 2); with one it
     /// boots from the floppy (drive 1; hard-disk partitions are drives 2, 3).
     pub fn power_on_fileserver(&mut self, hard_disk: Option<Vec<u8>>, floppy: Option<Vec<u8>>) -> Result<(), SessionError> {
+        let mut nvram = presets::fileserver();
+        presets::set_ram_kb(&mut nvram, self.ram_kb);
         let mut m = Machine::new(Config {
             rom: self.rom.clone(),
             patch_800k_floppy: false,
-            ram_kb: 512,
-            nvram: presets::fileserver(),
+            ram_kb: self.ram_kb,
+            nvram,
             straps: STRAPS_NORMAL,
             host_time: host_time(),
             disk_controller: true,
@@ -137,10 +143,11 @@ impl Rig {
         }
         let mut nv = presets::workstation();
         nv[10] = (((15 + slot) as u16) << 8) | 1; // own node ID, boot server 1
+        presets::set_ram_kb(&mut nv, self.ram_kb);
         let m = Machine::new(Config {
             rom: self.workstation_rom.clone().unwrap_or_else(|| self.rom.clone()),
             patch_800k_floppy: false,
-            ram_kb: 512,
+            ram_kb: self.ram_kb,
             nvram: nv,
             straps: STRAPS_NORMAL,
             host_time: host_time(),

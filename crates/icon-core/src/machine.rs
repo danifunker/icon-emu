@@ -6,11 +6,15 @@
 //! - E0000–F7FFF  empty "FUTURE" EPROM sockets (reads FFh)
 //! - F8000–FFFFF  boot ROM (5053-1/-2 ISS 2, 32 KB)
 //!
+//! With the CEMCORP 1 MB upgrade card (`ram_kb` 1024) the map above 7FFFF
+//! follows the 80186 chip selects instead; see [`Board::card_read8`].
+//!
 //! I/O: F801/F803 CRTC, F880/F882 COM9026, F900–F906 palette, F920 keyboard,
 //! F981–F987 PPI A, FA01 TMS5220, FA88 beeper/LED, FAA0–FAAE disk task
 //! file, FAC1–FAC7 PPI B, FAE1–FAE7 serial.
 
 use crate::cpu::{CpuBus, I80186};
+use crate::cpu::ChipSelects;
 use crate::devices::{arcnet::Com9026, counter::MwCounter, crtc::Crtc, nvram::Nvram, ppi8255::Ppi8255, serial::Sio8274, wd1002::{Disk, Wd1002}, rtc::Msm5832, tms5220::Tms5220};
 
 /// TMS5220C clock. It comes from an RC oscillator on the board; 640 kHz
@@ -31,6 +35,7 @@ pub struct Config {
     /// fileservers had a later ROM (Rel. 2.11) that could boot them; the
     /// 5053 ISS 2 loader only handles 8 sectors per track.
     pub patch_800k_floppy: bool,
+    /// 128–512 for the main board alone; 1024 fits the CEMCORP 1 MB card.
     pub ram_kb: u32,
     pub nvram: [u16; 16],
     pub straps: u8,
@@ -101,6 +106,13 @@ pub struct Board {
     pub io_log: Option<Vec<(u64, u16, u8, bool)>>,
     /// Unhandled I/O accesses seen, for discovering missing hardware.
     pub unknown_io: std::collections::BTreeMap<u16, u32>,
+    /// The 1 MB upgrade card is fitted (`ram_kb` 1024).
+    pub mem_card: bool,
+    /// Last word written to the card's port CF80 (None until written).
+    pub card_latch: Option<u16>,
+    /// The CPU's chip-select registers, copied by `Machine::step` when the
+    /// card is fitted (the card sits in the CPU socket and sees the outputs).
+    pub chip_selects: ChipSelects,
 }
 
 pub struct Machine {
@@ -164,6 +176,9 @@ impl Machine {
             speech_base: 0.0,
             speech_next: 0.0,
             unknown_io: Default::default(),
+            mem_card: cfg.ram_kb > 512,
+            card_latch: None,
+            chip_selects: ChipSelects::default(),
         };
         let mut cpu = I80186::new();
         cpu.reset();
@@ -189,6 +204,9 @@ impl Machine {
             }
         }
         let c = self.cpu.step(&mut self.board);
+        if self.board.mem_card {
+            self.board.chip_selects = *self.cpu.chip_selects();
+        }
         if from_rom && self.boot_entry.is_none() && self.cpu.pc() < 0xE0000 && self.board.cycles > 1_000_000 {
             let r = self.cpu.regs();
             let base = ((r.es as usize) << 4) + r.bx as usize;
@@ -648,14 +666,73 @@ impl Board {
         self.arcnet.set_reset(pb & 0x02 != 0, self.ppi_b.port_a_out(), self.cycles);
     }
 
+    /// What drives the bus at `addr` with the 1 MB card fitted.
+    ///
+    /// INFERRED from the Rel 2.11 ROM (file 0x1523) until the card's PALs
+    /// (U30/U31/U33) are read: the card supplies RAM everywhere the main
+    /// board does not answer. The main board answers in the UCS block (ROM in
+    /// its top 32 KB, empty sockets below) and in the MCS3 block (COM9026
+    /// RAM). Until the ROM writes port CF80 the card stays off above 7FFFF,
+    /// since at reset UCS covers only FFC00 up and the ROM runs from F8000.
+    fn card_map(&self, addr: u32) -> Mapped {
+        let cs = &self.chip_selects;
+        if cs.mmcs != 0 && cs.mpcs != 0 {
+            // Mid-range block: base MMCS[15:9], total size from MPCS[14:8]
+            // (one-hot, 8 KB units), four equal MCS blocks.
+            let base = ((cs.mmcs & 0xFE00) as u32) << 4;
+            let block = (((cs.mpcs >> 8) & 0x7F) as u32) << 11;
+            let mcs3 = base + 3 * block;
+            if block != 0 && addr >= mcs3 && addr < mcs3 + block {
+                return Mapped::Net(addr - mcs3);
+            }
+        }
+        if (addr as usize) < 0x80000 {
+            return Mapped::Ram;
+        }
+        let ucs = if self.card_latch.is_some() { ((cs.umcs & 0xFFC0) as u32) << 4 } else { 0x80000 };
+        if addr >= ucs {
+            if addr >= 0xF8000 { Mapped::Rom } else { Mapped::None }
+        } else {
+            Mapped::Ram
+        }
+    }
+
+    fn card_read8(&mut self, addr: u32) -> u8 {
+        match self.card_map(addr) {
+            Mapped::Ram => self.ram[addr as usize],
+            Mapped::Rom => self.rom[(addr & 0x7FFF) as usize],
+            Mapped::Net(o) if o < 0x1000 && o & 1 == 0 => self.arcnet.ram[(o >> 1) as usize],
+            _ => 0xFF,
+        }
+    }
+
+    fn card_write8(&mut self, addr: u32, val: u8) {
+        match self.card_map(addr) {
+            Mapped::Ram => self.ram[addr as usize] = val,
+            Mapped::Net(o) if o < 0x1000 && o & 1 == 0 => self.arcnet.ram[(o >> 1) as usize] = val,
+            _ => {}
+        }
+    }
+
     fn note_unknown(&mut self, port: u16) {
         *self.unknown_io.entry(port).or_insert(0) += 1;
     }
 }
 
+enum Mapped {
+    Ram,
+    Rom,
+    /// Offset into the MCS3 block (COM9026 RAM on even bytes of the first 4 KB).
+    Net(u32),
+    None,
+}
+
 impl CpuBus for Board {
     fn mem_read8(&mut self, addr: u32) -> u8 {
         let addr = addr & 0xF_FFFF;
+        if self.mem_card {
+            return self.card_read8(addr);
+        }
         match addr {
             a if (a as usize) < self.ram.len() => self.ram[a as usize],
             0xD8000..=0xD8FFF => {
@@ -677,6 +754,9 @@ impl CpuBus for Board {
                 self.watch_log.push((self.cycles, addr, val));
                 self.watch_pcs.push(self.cur_pc);
             }
+        }
+        if self.mem_card {
+            return self.card_write8(addr, val);
         }
         match addr {
             a if (a as usize) < self.ram.len() => self.ram[a as usize] = val,
@@ -740,6 +820,8 @@ impl Board {
 
     fn io_write8_inner(&mut self, port: u16, val: u8) {
         match port {
+            0xCF80 if self.mem_card => self.card_latch = Some(self.card_latch.unwrap_or(0) & 0xFF00 | val as u16),
+            0xCF81 if self.mem_card => self.card_latch = Some(self.card_latch.unwrap_or(0) & 0x00FF | (val as u16) << 8),
             0xF801 => self.crtc.write_addr(val),
             0xF803 => self.crtc.write_data(val),
             0xF880 => self.arcnet.write_mask(val),

@@ -45,6 +45,8 @@ pub struct Network {
     kinds: Vec<String>,
     /// Boot ROM per machine kind.
     roms: std::collections::HashMap<String, Vec<u8>>,
+    /// Memory fitted to every machine: 512, or 1024 for the 1 MB upgrade card.
+    ram_kb: u32,
 }
 
 #[wasm_bindgen]
@@ -52,7 +54,7 @@ impl Network {
     /// A segment with the fileserver and one ICON workstation, and no ROMs yet.
     #[wasm_bindgen(constructor)]
     pub fn new() -> Network {
-        Network { lan: Lan::new(2), kinds: vec![LEXICON.into(), ICON.into()], roms: Default::default() }
+        Network { lan: Lan::new(2), kinds: vec![LEXICON.into(), ICON.into()], roms: Default::default(), ram_kb: 512 }
     }
 
     /// Set the boot ROM for one machine kind ("lexicon", "icon"). Machines
@@ -61,6 +63,12 @@ impl Network {
         check_rom(rom)?;
         self.roms.insert(kind.to_string(), rom.to_vec());
         Ok(())
+    }
+
+    /// Memory for machines powered on from now: 512 KB, or 1024 KB (the
+    /// CEMCORP 1 MB upgrade card, which needs the Rel 2.11 boot ROM).
+    pub fn set_ram_kb(&mut self, kb: u32) {
+        self.ram_kb = if kb == 1024 { 1024 } else { 512 };
     }
 
     pub fn has_rom(&self, kind: &str) -> bool {
@@ -111,17 +119,19 @@ impl Network {
         let Some(kind) = self.kinds.get(slot) else { return Err(JsError::new("no such node")) };
         let rom = self.roms.get(kind).ok_or_else(|| JsError::new(&format!("no {kind} ROM loaded")))?.clone();
         let fs = slot == FILESERVER;
+        let mut nvram = if fs {
+            presets::fileserver()
+        } else {
+            let mut nv = presets::workstation();
+            nv[10] = (((15 + slot) as u16) << 8) | 1; // own node ID, boot server 1
+            nv
+        };
+        presets::set_ram_kb(&mut nvram, self.ram_kb);
         let m = Machine::new(Config {
             rom,
             patch_800k_floppy: false,
-            ram_kb: 512,
-            nvram: if fs {
-                presets::fileserver()
-            } else {
-                let mut nv = presets::workstation();
-                nv[10] = (((15 + slot) as u16) << 8) | 1; // own node ID, boot server 1
-                nv
-            },
+            ram_kb: self.ram_kb,
+            nvram,
             straps: STRAPS_NORMAL,
             host_time: host_time as i64,
             disk_controller: fs,

@@ -15,6 +15,9 @@ struct Args {
     preset: String,
     seconds: f64,
     ram_kb: u32,
+    /// Script runs: the workstation's memory and boot ROM.
+    ws_ram_kb: u32,
+    ws_rom: Option<String>,
     straps: u8,
     trace_last: usize,
     dump_ram: Option<String>,
@@ -49,6 +52,8 @@ fn parse_args() -> Args {
         preset: "ws".into(),
         seconds: 5.0,
         ram_kb: 512,
+        ws_ram_kb: 512,
+        ws_rom: None,
         straps: STRAPS_NORMAL,
         trace_last: 32,
         dump_ram: None,
@@ -73,6 +78,8 @@ fn parse_args() -> Args {
             "--preset" => a.preset = v(),
             "--seconds" => a.seconds = v().parse().unwrap(),
             "--ram-kb" => a.ram_kb = parse_num(&v()),
+            "--ws-ram-kb" => a.ws_ram_kb = parse_num(&v()),
+            "--ws-rom" => a.ws_rom = Some(v()),
             "--straps" => a.straps = parse_num(&v()) as u8,
             "--trace-last" => a.trace_last = parse_num(&v()) as usize,
             "--dump-ram" => a.dump_ram = Some(v()),
@@ -99,7 +106,7 @@ fn parse_args() -> Args {
             "--trace-count" => a.trace_count = parse_num(&v()) as usize,
             "--hd" => a.hd = Some(v()),
             "-h" | "--help" => {
-                println!("icon-cli [--rom F] [--preset ws|fs] [--seconds S] [--ram-kb N] [--straps 0x1F]\n         [--trace-last N] [--dump-ram F] [--screen F.ppm] [--floppy F.img] [--hd F.img]");
+                println!("icon-cli [--rom F] [--preset ws|fs] [--seconds S] [--ram-kb N] [--straps 0x1F]\n         [--ws-ram-kb N] [--ws-rom F] (script workstation)\n         [--trace-last N] [--dump-ram F] [--screen F.ppm] [--floppy F.img] [--hd F.img]");
                 std::process::exit(0);
             }
             _ => panic!("unknown argument {k}"),
@@ -245,11 +252,12 @@ fn main() {
     }
     let mut args = parse_args();
     let rom = std::fs::read(&args.rom).expect("read ROM");
-    let nvram = match args.preset.as_str() {
+    let mut nvram = match args.preset.as_str() {
         "ws" => presets::workstation(),
         "fs" => presets::fileserver(),
         p => panic!("unknown preset {p}"),
     };
+    presets::set_ram_kb(&mut nvram, args.ram_kb);
     let fs = args.preset == "fs";
     let _ = fs;
     let mut m = Machine::new(Config { rom, patch_800k_floppy: false, ram_kb: args.ram_kb, nvram, straps: args.straps, host_time: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0), disk_controller: fs });
@@ -466,12 +474,15 @@ fn run_script(fs: Machine, args: &Args, path: &str) {
     let shot_dir = std::path::Path::new(path).parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
     let mut lan = Lan::new(2);
     let mut fs = Some(fs);
+    let ws_rom = args.ws_rom.as_ref().map(|p| std::fs::read(p).expect("read workstation ROM")).unwrap_or_else(|| rom.clone());
     let new_ws = || {
+        let mut nvram = presets::workstation();
+        presets::set_ram_kb(&mut nvram, args.ws_ram_kb);
         Machine::new(Config {
-            rom: rom.clone(),
+            rom: ws_rom.clone(),
             patch_800k_floppy: false,
-            ram_kb: 512,
-            nvram: presets::workstation(),
+            ram_kb: args.ws_ram_kb,
+            nvram,
             straps: STRAPS_NORMAL,
             host_time: 0,
             disk_controller: false,

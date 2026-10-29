@@ -25,7 +25,7 @@ struct Server {
 pub fn main(argv: Vec<String>) {
     let mut socket = std::env::var("ICON_CI_SOCKET").unwrap_or_else(|_| DEFAULT_SOCKET.into());
     let mut rom = format!("{}/repos/icon_icon2_research/firmware/ICON1/icon1_rom_combined.bin", std::env::var("HOME").unwrap_or_default());
-    let (mut hd, mut floppy, mut workstations) = (None, None, 1usize);
+    let (mut hd, mut floppy, mut workstations, mut ram_kb) = (None, None, 1usize, 512u32);
     // --rom is used by every machine unless --fs-rom / --ws-rom override it.
     let (mut fs_rom, mut ws_rom): (Option<String>, Option<String>) = (None, None);
     let mut it = argv.into_iter();
@@ -39,8 +39,9 @@ pub fn main(argv: Vec<String>) {
             "--hd" => hd = Some(std::fs::read(v()).expect("read hard disk image")),
             "--floppy" => floppy = Some(std::fs::read(v()).expect("read floppy image")),
             "--workstations" => workstations = v().parse().expect("number"),
+            "--ram-kb" => ram_kb = v().parse().expect("number"),
             "-h" | "--help" => {
-                println!("icon-cli serve [--socket {DEFAULT_SOCKET}] [--rom F] [--fs-rom F] [--ws-rom F] [--hd IMG] [--floppy IMG] [--workstations N]");
+                println!("icon-cli serve [--socket {DEFAULT_SOCKET}] [--rom F] [--fs-rom F] [--ws-rom F] [--hd IMG] [--floppy IMG] [--workstations N] [--ram-kb 512|1024]");
                 return;
             }
             _ => panic!("unknown serve argument {k}"),
@@ -55,6 +56,7 @@ pub fn main(argv: Vec<String>) {
         }
         rig.workstation_rom = Some(ws);
     }
+    rig.ram_kb = ram_kb;
     let mut server = Server { rig, hd, floppy, quit: false };
     let _ = std::fs::remove_file(&socket);
     let listener = UnixListener::bind(&socket).unwrap_or_else(|e| panic!("bind {socket}: {e}"));
