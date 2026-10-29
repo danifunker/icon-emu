@@ -134,6 +134,16 @@ House has its own QNX shell window, so this keeps students out of the prompt *af
 - `/config/net.config` lists the nodes. `verify_net` checks it against the network and fills in the hardware database.
 - If the network hangs, the fileserver may have run out of virtual circuits. `kill_vcs`, or reboot the fileserver and then every workstation ⚠.
 
+## Sending a message to everyone
+
+`apb` ("all-points bulletin") sends a one-line message, up to 63 characters, to every screen on the network:
+
+```
+apb Lunch is ready - please log off
+```
+
+Each user sees it the next time they press Enter at the shell prompt, as `** APB (16:36): Lunch is ready - please log off **`. A second `apb` before then replaces the first. Users in a full-screen program such as House or the editor see it when they come back to the shell.
+
 ## Turning it off
 
 There is no shutdown command. The manual's order:
