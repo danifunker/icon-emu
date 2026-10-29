@@ -34,11 +34,23 @@ pub struct Disk {
     pub dirty: bool,
 }
 
+const FD640_BLANK: &[u8] = include_bytes!("fd640_blank.bin");
+
 impl Disk {
     /// A blank hard disk (e.g. 306/4/17 for 10 MB, 1024/8/17 for 64 MB).
     pub fn blank_hard(cylinders: u16, heads: u8, sectors: u8) -> Self {
         let size = cylinders as usize * heads as usize * sectors as usize * 512;
         Self { data: vec![0; size], cylinders, heads, sectors, first_sector: 0, write_protected: false, dirty: true }
+    }
+
+    /// A 640K (80x2x8) QNX 2 floppy, already initialised with `dinit 2`
+    /// (empty root directory and bitmap, 1280 blocks). It's QNX's default
+    /// floppy format on the ICON. Only the first three blocks are non-zero;
+    /// they were captured from `dinit` run on the emulated LEXICON.
+    pub fn formatted_floppy_640k() -> Vec<u8> {
+        let mut data = vec![0; 655_360];
+        data[..FD640_BLANK.len()].copy_from_slice(FD640_BLANK);
+        data
     }
 
     /// A hard-disk image whose geometry is taken from its block-1 geometry

@@ -6,6 +6,7 @@
 //!   status                         machines, emulated time, packets
 //!   hd-load IMG | hd-new [10mb|64mb]   disk for the next fileserver power-on
 //!   floppy IMG | eject             change the fileserver's diskette
+//!   floppy-new                     insert a blank pre-formatted 640K diskette
 //!   power SLOT [on|off] [--no-wait]    power a machine (waits for Login:)
 //!   add-workstation                add a workstation slot
 //!   login [SLOT] [USER] [PASSWORD] default root/superuser
@@ -82,6 +83,7 @@ fn exec(sock: &mut UnixStream, reader: &mut BufReader<UnixStream>, words: &[Stri
         "hd-new" => ("hd-new".into(), json!({"size": if w(1).is_empty() { "10mb".into() } else { w(1) }})),
         "floppy" => ("floppy".into(), json!({"path": w(1)})),
         "eject" => ("floppy".into(), json!({"path": null})),
+        "floppy-new" => ("floppy-new".into(), json!({})),
         "power" => ("power".into(), json!({"slot": num(1, 0), "on": w(2) != "off", "wait": !words.iter().any(|x| x == "--no-wait")})),
         "login" => ("login".into(), json!({"slot": num(1, 0), "user": if w(2).is_empty() { "root".into() } else { w(2) }, "password": if w(3).is_empty() { "superuser".into() } else { w(3) }})),
         "run" => {

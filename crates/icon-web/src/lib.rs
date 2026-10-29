@@ -26,6 +26,12 @@ pub fn blank_hard_disk_64mb() -> Vec<u8> {
     Disk::blank_hard(c, h, s).data
 }
 
+/// A pre-formatted 640K QNX floppy (empty, as `dinit 2` leaves it).
+#[wasm_bindgen]
+pub fn blank_floppy_640k() -> Vec<u8> {
+    Disk::formatted_floppy_640k()
+}
+
 fn check_rom(rom: &[u8]) -> Result<(), JsError> {
     if rom.len() != 0x8000 {
         return Err(JsError::new("expected a 32 KB ROM image (the two 16 KB EPROMs interleaved, even bytes first)"));
@@ -245,6 +251,14 @@ impl Network {
         if let Some(m) = self.m_mut(FILESERVER) {
             m.board.insert_floppy(None);
         }
+    }
+
+    /// Current floppy contents, including what QNX wrote (empty if none).
+    pub fn floppy_image(&self) -> Vec<u8> {
+        self.m(FILESERVER)
+            .and_then(|m| m.board.wd.drives[3].as_ref())
+            .map(|d| d.data.clone())
+            .unwrap_or_default()
     }
 
     /// Attach the fileserver's hard disk. Geometry comes from a geometry

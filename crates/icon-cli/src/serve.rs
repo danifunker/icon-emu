@@ -136,6 +136,15 @@ impl Server {
                 }
                 Ok(json!("ok"))
             }
+            "floppy-new" => {
+                let img = Some(Disk::formatted_floppy_640k());
+                if self.rig.machine(FILESERVER).is_ok() {
+                    self.rig.insert_floppy(img).map_err(e)?;
+                } else {
+                    self.floppy = img;
+                }
+                Ok(json!("blank pre-formatted 640K diskette inserted"))
+            }
             "power" => {
                 let on = a["on"].as_bool().unwrap_or(true);
                 let n = slot();

@@ -1,4 +1,4 @@
-import init, { Network, blank_hard_disk_10mb } from "./pkg/icon_web.js";
+import init, { Network, blank_hard_disk_10mb, blank_floppy_640k } from "./pkg/icon_web.js";
 
 const FS = 0;
 const $ = (id) => document.getElementById(id);
@@ -319,15 +319,46 @@ $("hd-download").addEventListener("click", () => {
 $("floppy").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  floppy = { name: file.name, data: new Uint8Array(await file.arrayBuffer()) };
-  $("floppy-name").textContent = file.name;
-  $("slot0").classList.add("loaded");
-  if (net && net.is_on(FS)) {
-    try { net.insert_floppy(floppy.data); } catch (err) { alert(err); }
-  }
+  syncFloppy();
+  if (floppy) lastFloppy = floppy;
+  insertFloppy({ name: file.name, data: new Uint8Array(await file.arrayBuffer()) });
   e.target.value = "";
 });
+// What QNX wrote to the diskette lives in the emulator; copy it back first.
+function syncFloppy() {
+  if (floppy && net && net.is_on(FS)) {
+    const data = net.floppy_image();
+    if (data.length) floppy.data = data;
+  }
+}
+let lastFloppy = null; // the diskette most recently ejected, still downloadable
+function insertFloppy(f) {
+  floppy = f;
+  $("floppy-name").textContent = f.name;
+  $("slot0").classList.add("loaded");
+  if (net && net.is_on(FS)) {
+    try { net.insert_floppy(f.data); } catch (err) { alert(err); }
+  }
+}
+$("floppy-new").addEventListener("click", () => {
+  syncFloppy();
+  if (floppy) lastFloppy = floppy;
+  insertFloppy({ name: "blank-640k.img", data: blank_floppy_640k() });
+});
+$("floppy-download").addEventListener("click", () => {
+  syncFloppy();
+  const f = floppy || lastFloppy;
+  if (!f) { alert("No diskette to download."); return; }
+  const url = URL.createObjectURL(new Blob([f.data], { type: "application/octet-stream" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = f.name;
+  a.click();
+  URL.revokeObjectURL(url);
+});
 $("eject").addEventListener("click", () => {
+  syncFloppy();
+  if (floppy) lastFloppy = floppy;
   floppy = null;
   $("floppy-name").textContent = "no diskette";
   $("slot0").classList.remove("loaded");
@@ -341,6 +372,7 @@ function power(slot) {
   startAudio();
   const m = machines[slot];
   if (net.is_on(slot)) {
+    if (slot === FS) syncFloppy();
     if (slot === FS && hardDisk) { syncHd(); idbPut("fileserver-hd", hardDisk); }
     net.power_off(slot);
     m.power.classList.remove("on");
