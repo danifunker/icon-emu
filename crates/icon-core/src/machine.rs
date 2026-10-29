@@ -668,7 +668,8 @@ impl Board {
 
     /// What drives the bus at `addr` with the 1 MB card fitted.
     ///
-    /// INFERRED from the Rel 2.11 ROM (file 0x1523) until the card's PALs
+    /// INFERRED from the Rel 2.11 ROM (file 0x1523) and the 4.10 kernels
+    /// (RAM to F7000 from NVRAM, network RAM from MMCS/MPCS) until the PALs
     /// (U30/U31/U33) are read: the card supplies RAM everywhere the main
     /// board does not answer. The main board answers in the UCS block (ROM in
     /// its top 32 KB, empty sockets below) and in the MCS3 block (COM9026

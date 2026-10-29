@@ -223,7 +223,7 @@
     the 4.10.01 workstation boot image crashes under that ROM. Install the 4.10.05 upgrade diskette with
     <code>configure</code> (see <a href="https://github.com/danifunker/icon-emu/blob/main/docs/REBUILD.md">the rebuild guide</a>, section 2b). The 5053 ISS 2 ROM works with either.
     <b>Memory: 1 MB</b> fits the CEMCORP "1 MEG ICON UPGRADE BOARD" to every machine at its next power-on. Only the
-    Rel 2.11 ROM supports it (the 5053 ISS 2 ROM fails to network-boot, error 57); the kernel then reports about 969 KB.
+    Rel 2.11 ROM supports it: it moves the network RAM and ROM windows that the 4.10 kernels rely on. With the 5053 ISS 2 ROM the kernel loads but hangs before <code>Login:</code>. With Rel 2.11 each node has about 969 KB.
     To install: insert the <b>ICON Fileserver Boot Diskette</b> (4.01.00), add a hard disk, power on the fileserver and
     wait for <code>Login:</code>, then power on a workstation.
     Log in as <code>root</code> / <code>superuser</code>. Click a machine to give it the keyboard.
