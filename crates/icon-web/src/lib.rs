@@ -74,7 +74,7 @@ pub fn disk_list(image: &[u8], offset: f64, path: &str) -> Result<String, JsErro
     let mut img = image.to_vec();
     let mut vol = files::open(&mut img, offset as u64).map_err(js_err)?;
     let mut list = vol.list(path).map_err(js_err)?;
-    list.sort_by(|a, b| (!a.is_dir, a.name.to_lowercase()).cmp(&(!b.is_dir, b.name.to_lowercase())));
+    list.sort_by_key(|e| (!e.is_dir, e.name.to_lowercase()));
     let entries: Vec<String> = list
         .iter()
         .map(|e| {
@@ -172,6 +172,12 @@ pub struct Network {
     roms: std::collections::HashMap<String, Vec<u8>>,
     /// Memory fitted to every machine: 512, or 1024 for the 1 MB upgrade card.
     ram_kb: u32,
+}
+
+impl Default for Network {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[wasm_bindgen]

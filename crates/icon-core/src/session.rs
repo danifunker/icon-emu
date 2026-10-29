@@ -159,7 +159,9 @@ impl Rig {
     }
 
     pub fn power_off(&mut self, slot: usize) -> Option<Machine> {
-        self.consoles.get_mut(slot).map(|c| *c = Console::default());
+        if let Some(c) = self.consoles.get_mut(slot) {
+            *c = Console::default();
+        }
         self.lan.power_off(slot)
     }
 
@@ -213,7 +215,7 @@ impl Rig {
         self.type_text(slot, &format!("{user}\r"))?;
         self.wait_for(slot, |s| s.lines().any(|l| l.contains("Password:")), "Password:", 30.0)?;
         self.type_text(slot, &format!("{password}\r"))?;
-        self.wait_for(slot, |s| s.lines().filter(|l| !l.trim().is_empty()).last().is_some_and(is_prompt), "$ prompt", 60.0)
+        self.wait_for(slot, |s| s.lines().rfind(|l| !l.trim().is_empty()).is_some_and(is_prompt), "$ prompt", 60.0)
     }
 
     /// Run a shell command on a node and return what it printed (the lines

@@ -362,7 +362,7 @@ fn main() {
         println!("  {pc:05X}{}", rom_off(*pc));
     }
     let mut hv: Vec<_> = hot.into_iter().collect();
-    hv.sort_by(|a, b| b.1.cmp(&a.1));
+    hv.sort_by_key(|e| std::cmp::Reverse(e.1));
     println!("hottest PCs:");
     for (pc, n) in hv.iter().take(8) {
         println!("  {pc:05X}{} x{n}", rom_off(*pc));

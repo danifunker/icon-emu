@@ -197,7 +197,7 @@ impl Server {
                 if !on {
                     if n == FILESERVER {
                         // Keep the disks for the next power-on.
-                        if let Some(m) = self.rig.machine(FILESERVER).ok() {
+                        if let Ok(m) = self.rig.machine(FILESERVER) {
                             self.hd = m.board.wd.drives[0].as_ref().map(|d| d.data.clone());
                             self.floppy = m.board.wd.drives[3].as_ref().map(|d| d.data.clone());
                         }
@@ -283,7 +283,7 @@ impl Server {
             "screenshot" => {
                 let path = s("path")?;
                 let rgba = self.rig.machine(slot()).map_err(e)?.board.render_rgba();
-                let mut ppm = format!("P6\n640 240\n255\n").into_bytes();
+                let mut ppm = b"P6\n640 240\n255\n".to_vec();
                 for px in rgba.chunks(4) {
                     ppm.extend_from_slice(&px[..3]);
                 }

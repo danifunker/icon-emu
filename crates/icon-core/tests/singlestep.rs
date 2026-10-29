@@ -292,9 +292,9 @@ fn run_suite(s: &Suite) {
             }
             let got = from_regs(&cpu.regs());
             let mut ok = true;
-            for k in 0..14 {
+            for (k, &g) in got.iter().enumerate().take(14) {
                 let m = if k == FLAGS { mask } else { 0xffff };
-                if got[k] & m != t.fin[k] & m {
+                if g & m != t.fin[k] & m {
                     ok = false;
                 }
             }

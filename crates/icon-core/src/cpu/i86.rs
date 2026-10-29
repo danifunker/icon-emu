@@ -219,7 +219,7 @@ static PARITY: [bool; 256] = {
     let mut p = [false; 256];
     let mut i = 0;
     while i < 256 {
-        p[i] = (i as u8).count_ones() % 2 == 0;
+        p[i] = (i as u8).count_ones().is_multiple_of(2);
         i += 1;
     }
     p
@@ -2023,18 +2023,18 @@ impl Core {
             }
             0xd4 => {
                 let base = self.fetch(h);
-                if base == 0 {
+                let al = self.rb(AL);
+                if let (Some(q), Some(r)) = (al.checked_div(base), al.checked_rem(base)) {
+                    self.wb(AH, q);
+                    self.wb(AL, r);
+                    // MAME sets SZP from AX; the hardware uses AL.
+                    self.set_szpf_byte(r as u32);
+                    self.clk(t::AAM);
+                } else {
                     // The 8086 leaves SZP as for a zero result (hardware
                     // captures); MAME leaves them unchanged.
                     self.set_szpf_byte(0);
                     self.interrupt(h, 0);
-                } else {
-                    let al = self.rb(AL);
-                    self.wb(AH, al / base);
-                    self.wb(AL, al % base);
-                    // MAME sets SZP from AX; the hardware uses AL.
-                    self.set_szpf_byte((al % base) as u32);
-                    self.clk(t::AAM);
                 }
             }
             0xd5 => {
@@ -2337,19 +2337,14 @@ impl Core {
                 self.clkm(t::IMUL_R8, t::IMUL_M8);
             }
             0x30 => {
-                if tmp != 0 {
-                    let ax = self.regs[AX] as u32;
-                    let q = ax / tmp;
-                    let r = ax % tmp;
-                    if q > 0xff {
-                        self.interrupt(h, 0);
-                    } else {
+                let ax = self.regs[AX] as u32;
+                match (ax.checked_div(tmp), ax.checked_rem(tmp)) {
+                    (Some(q), Some(r)) if q <= 0xff => {
                         self.wb(AL, q as u8);
                         self.wb(AH, r as u8);
                         self.zero_val = q & 0xff;
                     }
-                } else {
-                    self.interrupt(h, 0);
+                    _ => self.interrupt(h, 0),
                 }
                 self.clkm(t::DIV_R8, t::DIV_M8);
             }
@@ -2419,19 +2414,14 @@ impl Core {
                 self.clkm(t::IMUL_R16, t::IMUL_M16);
             }
             0x30 => {
-                if tmp != 0 {
-                    let n = ((self.regs[DX] as u32) << 16) | self.regs[AX] as u32;
-                    let q = n / tmp;
-                    let r = n % tmp;
-                    if q > 0xffff {
-                        self.interrupt(h, 0);
-                    } else {
+                let n = ((self.regs[DX] as u32) << 16) | self.regs[AX] as u32;
+                match (n.checked_div(tmp), n.checked_rem(tmp)) {
+                    (Some(q), Some(r)) if q <= 0xffff => {
                         self.regs[AX] = q as u16;
                         self.regs[DX] = r as u16;
                         self.zero_val = q;
                     }
-                } else {
-                    self.interrupt(h, 0);
+                    _ => self.interrupt(h, 0),
                 }
                 self.clkm(t::DIV_R16, t::DIV_M16);
             }

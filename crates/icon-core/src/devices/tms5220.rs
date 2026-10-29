@@ -344,8 +344,8 @@ impl Tms5220 {
             return;
         }
         let ks = if self.new_pitch == 0 { 4 } else { 10 };
-        for i in 0..ks {
-            self.new_k[i] = self.read_bits(KBITS[i]);
+        for (i, &bits) in KBITS.iter().enumerate().take(ks) {
+            self.new_k[i] = self.read_bits(bits);
             self.update_fifo_status_and_ints();
             if self.ddis && self.buffer_empty {
                 return;

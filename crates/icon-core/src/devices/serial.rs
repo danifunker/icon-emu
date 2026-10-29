@@ -28,9 +28,8 @@ impl Channel {
         }
         self.wr[0] = v;
         self.pointer = v & 7;
-        match (v >> 3) & 7 {
-            3 => self.reset(), // channel reset
-            _ => {}
+        if (v >> 3) & 7 == 3 {
+            self.reset(); // channel reset
         }
         if v >> 6 == 3 {
             self.rr0 &= !RR0_TX_UNDERRUN; // reset Tx underrun/EOM latch

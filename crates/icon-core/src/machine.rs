@@ -189,12 +189,12 @@ impl Machine {
     pub fn step(&mut self) -> u32 {
         let from_rom = self.cpu.pc() >= 0xF8000;
         self.board.cur_pc = self.cpu.pc();
-        if self.int5c_log.is_some() {
+        if let Some(log) = self.int5c_log.as_mut() {
             let r = self.cpu.regs();
             if let Some(&(cs, ip, func)) = self.int5c_pending.last() {
                 if r.cs == cs && r.ip == ip {
                     self.int5c_pending.pop();
-                    self.int5c_log.as_mut().unwrap().push((self.board.cycles, func, r.ax));
+                    log.push((self.board.cycles, func, r.ax));
                 }
             }
             let pc = self.cpu.pc();
@@ -478,10 +478,7 @@ impl Board {
             }
         };
         let decode = |shift: u32, line: usize, col: usize| -> Option<char> {
-            let mut ten = [0u8; 10];
-            for k in 0..10 {
-                ten[k] = byte(shift, line + k, col);
-            }
+            let ten: [u8; 10] = std::array::from_fn(|k| byte(shift, line + k, col));
             let mut nine = [0u8; 9];
             nine.copy_from_slice(&ten[..9]);
             tables.iter().find_map(|(t10, t9)| t10.get(&ten).or_else(|| t9.get(&nine)).copied())
@@ -563,7 +560,7 @@ impl Board {
                 return Some(b);
             }
         }
-        for anchor in [b'H', b'E', b'T', b'N', b'S'] {
+        for &anchor in b"HETNS" {
             let g = rom_glyph(anchor);
             let mut i = 0;
             while let Some(p) = self.ram[i..].windows(10).position(|w| w == g) {
