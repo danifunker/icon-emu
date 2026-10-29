@@ -19,6 +19,16 @@
 //!   screen [SLOT] | transcript [SLOT] | screenshot SLOT FILE.ppm
 //!   speech-wav SLOT FILE.wav   (the speech chip's recent output, 8 kHz)
 //!   hd-save FILE | floppy-save FILE
+//!
+//! Files on the fileserver's disks. DISK is fd (the diskette), hd (the hard
+//! disk's first partition) or hd2 / hd3 (its other partitions). Reading works
+//! on a running machine; the diskette can be written any time, the hard disk
+//! only while the fileserver is off. --text converts line endings (QNX ends
+//! lines with RS); --replace overwrites an existing file.
+//!   ls DISK [PATH]                 list a folder
+//!   get DISK PATH HOSTFILE [--text]
+//!   put DISK HOSTFILE PATH [--text] [--replace]
+//!   mkdir DISK PATH | rm DISK PATH
 //!   script FILE [--keep-going]     run icon-ci commands, one per line (# comments)
 //!   quit
 //!
@@ -109,6 +119,38 @@ fn exec(sock: &mut UnixStream, reader: &mut BufReader<UnixStream>, words: &[Stri
         "screen" | "transcript" => (w(0), json!({"slot": num(1, 0)})),
         "screenshot" => ("screenshot".into(), json!({"slot": num(1, 0), "path": w(2)})),
         "hd-save" | "floppy-save" => (w(0), json!({"path": w(1)})),
+        "ls" | "get" | "put" | "mkdir" | "rm" => {
+            let flags: Vec<&String> = words.iter().filter(|x| x.starts_with("--")).collect();
+            let pos: Vec<&String> = words.iter().filter(|x| !x.starts_with("--")).collect();
+            for f in &flags {
+                if !matches!(f.as_str(), "--text" | "--replace") {
+                    return Err(format!("unknown option {f}"));
+                }
+            }
+            let p = |i: usize| pos.get(i).map(|x| x.to_string()).ok_or_else(|| format!("{}: missing argument (icon-ci --help)", w(0)));
+            // The server runs elsewhere: hand it absolute host paths.
+            let host = |x: String| std::path::absolute(&x).map(|p| p.display().to_string()).unwrap_or(x);
+            let disk = p(1)?;
+            let (dname, part) = match disk.as_str() {
+                "fd" => ("fd", 0),
+                "hd" => ("hd", 0),
+                d if d.starts_with("hd") => ("hd", d[2..].parse::<u64>().map_err(|_| format!("bad disk {d:?}"))?),
+                d => return Err(format!("unknown disk {d:?} (fd, hd, hd2, hd3)")),
+            };
+            let base = json!({"disk": dname, "part": part, "text": flags.iter().any(|f| *f == "--text"), "replace": flags.iter().any(|f| *f == "--replace")});
+            let with = |extra: Value| {
+                let mut v = base.clone();
+                v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+                v
+            };
+            match w(0).as_str() {
+                "ls" => ("files".into(), with(json!({"path": pos.get(2).map(|x| x.to_string()).unwrap_or("/".into())}))),
+                "get" => ("file-get".into(), with(json!({"path": p(2)?, "out": host(p(3)?)}))),
+                "put" => ("file-put".into(), with(json!({"src": host(p(2)?), "path": p(3)?}))),
+                "mkdir" => ("file-mkdir".into(), with(json!({"path": p(2)?}))),
+                _ => ("file-rm".into(), with(json!({"path": p(2)?}))),
+            }
+        }
         "speech-wav" => ("speech-wav".into(), json!({"slot": num(1, 1), "path": w(2)})),
         other => return Err(format!("unknown command {other:?} (icon-ci --help)")),
     };
@@ -116,6 +158,19 @@ fn exec(sock: &mut UnixStream, reader: &mut BufReader<UnixStream>, words: &[Stri
     Ok(match cmd.as_str() {
         "run" => data["output"].as_str().unwrap_or("").to_string(),
         "screen" | "transcript" => data["text"].as_str().unwrap_or("").to_string(),
+        "files" => {
+            let mut out: Vec<String> = data["entries"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|e| {
+                    let name = format!("{}{}", e["name"].as_str().unwrap_or(""), if e["dir"].as_bool() == Some(true) { "/" } else { "" });
+                    format!("{:>8}  {:19}  {name}", if e["dir"].as_bool() == Some(true) { String::new() } else { e["size"].to_string() }, e["date"].as_str().unwrap_or(""))
+                })
+                .collect();
+            out.push(format!("{} KB free of {} KB", data["free"].as_u64().unwrap_or(0) / 1024, data["total"].as_u64().unwrap_or(0) / 1024));
+            out.join("\n")
+        }
         _ => match data {
             Value::String(s) => s,
             v => v.to_string(),

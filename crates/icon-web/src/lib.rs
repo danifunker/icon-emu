@@ -99,9 +99,7 @@ pub fn disk_list(image: &[u8], offset: f64, path: &str) -> Result<String, JsErro
 /// A file's contents; with `text`, QNX text gets LF line endings.
 #[wasm_bindgen]
 pub fn disk_read(image: &[u8], offset: f64, path: &str, text: bool) -> Result<Vec<u8>, JsError> {
-    let mut img = image.to_vec();
-    let data = files::open(&mut img, offset as u64).and_then(|mut v| v.get(path)).map_err(js_err)?;
-    Ok(if text && qnx2fs::looks_like_rs_text(&data) { qnx2fs::rs_to_lf(&data) } else { data })
+    files::read_file(&mut image.to_vec(), offset as u64, path, text).map_err(js_err)
 }
 
 /// Write a file (its name must already be valid; see `qnx_name`). With `text`,
@@ -111,19 +109,8 @@ pub fn disk_read(image: &[u8], offset: f64, path: &str, text: bool) -> Result<Ve
 #[allow(clippy::too_many_arguments)]
 pub fn disk_put(image: Vec<u8>, offset: f64, path: &str, data: &[u8], text: bool, replace: bool, now: f64) -> Result<Vec<u8>, JsError> {
     let mut img = image;
-    {
-        let mut vol = files::open(&mut img, offset as u64).map_err(js_err)?;
-        vol.set_clock(icon_core::devices::rtc::icon_time(now as i64));
-        if replace {
-            if let Ok(e) = vol.lookup(path) {
-                if !e.is_dir {
-                    vol.remove(path).map_err(js_err)?;
-                }
-            }
-        }
-        let body = if text && files::looks_like_text(data) { qnx2fs::lf_to_rs(data) } else { data.to_vec() };
-        vol.put(path, &body, &qnx2fs::NewEntry::default()).map_err(js_err)?;
-    }
+    let now = icon_core::devices::rtc::icon_time(now as i64);
+    files::write_file(&mut img, offset as u64, path, data, text, replace, now).map_err(js_err)?;
     Ok(img)
 }
 

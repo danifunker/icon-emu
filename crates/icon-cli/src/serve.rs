@@ -1,5 +1,5 @@
-//! `icon-cli serve`: a headless ICON network driven over a control socket,
-//! in the style of iris's `--ci` mode. Use the `icon-ci` client.
+//! `icon-cli serve`: a headless ICON network driven over a control socket.
+//! Use the `icon-ci` client.
 //!
 //! Protocol: one JSON object per line, `{"cmd": "...", "args": {...}}`; each
 //! gets one reply line `{"ok": true, "data": ...}` or `{"ok": false,
@@ -7,6 +7,7 @@
 //! scripted session is deterministic.
 
 use icon_core::devices::wd1002::{Disk, HD_10MB, HD_64MB};
+use icon_core::files::{self, qnx2fs};
 use icon_core::session::{Rig, FILESERVER};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
@@ -73,7 +74,52 @@ pub fn main(argv: Vec<String>) {
     let _ = std::fs::remove_file(&socket);
 }
 
+fn now_secs() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+
 impl Server {
+    /// The current image of `a["disk"]` ("fd" or "hd"): what the running
+    /// fileserver holds, else what it will get at its next power-on.
+    fn disk_image(&self, a: &Value) -> Result<Vec<u8>, String> {
+        match a["disk"].as_str().unwrap_or("hd") {
+            "fd" => self.rig.floppy().or_else(|| self.floppy.clone()).ok_or_else(|| "no diskette".into()),
+            "hd" => self
+                .rig
+                .hard_disk()
+                .or_else(|| self.hd.clone().map(|d| Disk::hard_auto(d).data))
+                .ok_or_else(|| "no hard disk".into()),
+            d => Err(format!("unknown disk {d:?} (fd or hd)")),
+        }
+    }
+
+    /// The disk image and the byte offset of the QNX volume `a["part"]` in it.
+    fn volume(&self, a: &Value) -> Result<(Vec<u8>, u64), String> {
+        let img = self.disk_image(a)?;
+        let off = files::select(&img, a["part"].as_u64().unwrap_or(0) as usize)?;
+        Ok((img, off))
+    }
+
+    /// Change a disk with `f(image, volume offset)`, keeping the result.
+    fn edit<T>(&mut self, a: &Value, f: impl FnOnce(&mut Vec<u8>, u64) -> qnx2fs::Result<T>) -> Result<T, String> {
+        let fd = a["disk"].as_str() == Some("fd");
+        let running = self.rig.machine(FILESERVER).is_ok();
+        if !fd && running {
+            return Err("the fileserver is on: switch it off (power 0 off) before changing its hard disk".into());
+        }
+        let (mut img, off) = self.volume(a)?;
+        let out = f(&mut img, off).map_err(|x| x.to_string())?;
+        if !fd {
+            self.hd = Some(img);
+        } else if running {
+            // As swapping diskettes by hand: out, then back in with the change.
+            self.rig.insert_floppy(Some(img)).map_err(|x| x.to_string())?;
+        } else {
+            self.floppy = Some(img);
+        }
+        Ok(out)
+    }
+
     fn handle(&mut self, stream: UnixStream) {
         let mut out = stream.try_clone().expect("clone stream");
         for line in BufReader::new(stream).lines() {
@@ -254,6 +300,63 @@ impl Server {
                 let path = s("path")?;
                 let d = self.rig.floppy().or_else(|| self.floppy.clone()).ok_or("no diskette")?;
                 std::fs::write(&path, d).map_err(|x| x.to_string())?;
+                Ok(json!({"path": path}))
+            }
+            // Files on the fileserver's disks. `disk` is "fd" or "hd"; `part`
+            // picks a hard-disk partition (default the first). Reads see the
+            // disk as the running machine holds it. A diskette can be written
+            // any time (it is swapped out and back in); the hard disk only
+            // while the fileserver is off, since QNX caches it.
+            "files" => {
+                let (img, off) = self.volume(a)?;
+                let mut img = img;
+                let mut vol = files::open(&mut img, off).map_err(|x| x.to_string())?;
+                let list = vol.list(&s("path").unwrap_or_else(|_| "/".into())).map_err(|x| x.to_string())?;
+                Ok(json!({
+                    "free": vol.free_blocks() * 512,
+                    "total": vol.total_blocks() * 512,
+                    "entries": list.iter().map(|e| json!({
+                        "name": e.name,
+                        "dir": e.is_dir,
+                        "size": e.size,
+                        "date": e.modified().map(qnx2fs::format_date),
+                        "attrs": e.describe(),
+                    })).collect::<Vec<_>>(),
+                }))
+            }
+            "file-get" => {
+                let (mut img, off) = self.volume(a)?;
+                let data = files::read_file(&mut img, off, &s("path")?, a["text"].as_bool().unwrap_or(false)).map_err(|x| x.to_string())?;
+                let out = s("out")?;
+                std::fs::write(&out, &data).map_err(|x| format!("{out}: {x}"))?;
+                Ok(json!({"path": out, "bytes": data.len()}))
+            }
+            "file-put" => {
+                let data = read("src")?;
+                let path = s("path")?;
+                let (text, replace) = (a["text"].as_bool().unwrap_or(false), a["replace"].as_bool().unwrap_or(false));
+                let now = icon_core::devices::rtc::icon_time(now_secs());
+                let e = self.edit(a, |img, off| files::write_file(img, off, &path, &data, text, replace, now))?;
+                Ok(json!({"path": e.path, "bytes": e.size}))
+            }
+            "file-mkdir" => {
+                let path = s("path")?;
+                let now = icon_core::devices::rtc::icon_time(now_secs());
+                self.edit(a, |img, off| {
+                    let mut vol = files::open(img, off)?;
+                    vol.set_clock(now);
+                    vol.mkdir(&path, &qnx2fs::NewEntry::default())
+                })?;
+                Ok(json!({"path": path}))
+            }
+            "file-rm" => {
+                let path = s("path")?;
+                let now = icon_core::devices::rtc::icon_time(now_secs());
+                self.edit(a, |img, off| {
+                    let mut vol = files::open(img, off)?;
+                    vol.set_clock(now);
+                    vol.remove(&path)
+                })?;
                 Ok(json!({"path": path}))
             }
             "quit" => {

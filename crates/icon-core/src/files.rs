@@ -44,6 +44,55 @@ pub fn open(image: &mut Vec<u8>, offset: u64) -> qnx2fs::Result<Volume<Cursor<&m
     Volume::open(Cursor::new(image), offset)
 }
 
+/// The volume to use: `part` 0 means the first one (a diskette's only volume,
+/// or a hard disk's first partition); `n` means hard-disk partition `n`.
+pub fn select(image: &[u8], part: usize) -> Result<u64, String> {
+    let vols = volumes(image);
+    let found = if part == 0 {
+        vols.first()
+    } else {
+        vols.iter().find(|v| v.label == format!("partition {part}") || (part == 1 && v.offset == 0))
+    };
+    found.map(|v| v.offset).ok_or_else(|| {
+        if vols.is_empty() {
+            "no QNX filesystem on this disk (a blank diskette must be formatted: use a new pre-formatted one)".into()
+        } else {
+            format!("no QNX partition {part} (found: {})", vols.iter().map(|v| v.label.as_str()).collect::<Vec<_>>().join(", "))
+        }
+    })
+}
+
+/// A file's contents; with `text`, QNX text gets LF line endings.
+pub fn read_file(image: &mut Vec<u8>, offset: u64, path: &str, text: bool) -> qnx2fs::Result<Vec<u8>> {
+    let data = open(image, offset)?.get(path)?;
+    Ok(if text && qnx2fs::looks_like_rs_text(&data) { qnx2fs::rs_to_lf(&data) } else { data })
+}
+
+/// Write a file. With `text`, host text gets QNX's RS line endings; with
+/// `replace`, an existing file of that name is deleted first. `now` is Unix
+/// seconds as the ICON's clock reads (see `devices::rtc::icon_time`).
+pub fn write_file(
+    image: &mut Vec<u8>,
+    offset: u64,
+    path: &str,
+    data: &[u8],
+    text: bool,
+    replace: bool,
+    now: i64,
+) -> qnx2fs::Result<qnx2fs::Entry> {
+    let mut vol = open(image, offset)?;
+    vol.set_clock(now);
+    if replace {
+        if let Ok(e) = vol.lookup(path) {
+            if !e.is_dir {
+                vol.remove(path)?;
+            }
+        }
+    }
+    let body = if text && looks_like_text(data) { qnx2fs::lf_to_rs(data) } else { data.to_vec() };
+    vol.put(path, &body, &qnx2fs::NewEntry::default())
+}
+
 /// Whether `data` looks like host text (LF or CR LF lines) that should get
 /// QNX's RS line endings: no NULs and hardly any other control bytes.
 pub fn looks_like_text(data: &[u8]) -> bool {
