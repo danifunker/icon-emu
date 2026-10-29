@@ -11,7 +11,11 @@
 //! file, FAC1–FAC7 PPI B, FAE1–FAE7 serial.
 
 use crate::cpu::{CpuBus, I80186};
-use crate::devices::{arcnet::Com9026, counter::MwCounter, crtc::Crtc, nvram::Nvram, ppi8255::Ppi8255, serial::Sio8274, wd1002::{Disk, Wd1002}, rtc::Msm5832};
+use crate::devices::{arcnet::Com9026, counter::MwCounter, crtc::Crtc, nvram::Nvram, ppi8255::Ppi8255, serial::Sio8274, wd1002::{Disk, Wd1002}, rtc::Msm5832, tms5220::Tms5220};
+
+/// TMS5220C clock. It comes from an RC oscillator on the board; 640 kHz
+/// (8 kHz output) is the usual value and has not been measured on an ICON.
+pub const SPEECH_CLOCK: u32 = 640_000;
 use std::collections::VecDeque;
 
 /// CPU clock: 14.318 MHz crystal / 2.
@@ -76,6 +80,14 @@ pub struct Board {
     audio_cursor: u64,
     audio_dc: f32,
     audio_prev: f32,
+    /// TMS5220C speech chip (port FA01, interrupt on PPI A PC4), fitted when
+    /// NVRAM word 0 bit 8 ("no speech") is clear: workstations, not fileservers.
+    pub speech: Option<Tms5220>,
+    /// Speech samples not yet taken by `take_audio`, the CPU cycle of the
+    /// first one, and the cycle the next one is due.
+    speech_samples: Vec<i16>,
+    speech_base: f64,
+    speech_next: f64,
     /// Debug: log writes to this linear address range as (cycle, addr, value).
     pub watch: Option<(u32, u32)>,
     pub watch_log: Vec<(u64, u32, u8)>,
@@ -145,6 +157,10 @@ impl Machine {
             audio_cursor: 0,
             audio_dc: 0.0,
             audio_prev: 0.0,
+            speech: (cfg.nvram[0] & 0x0100 == 0).then(Tms5220::default),
+            speech_samples: Vec::new(),
+            speech_base: 0.0,
+            speech_next: 0.0,
             unknown_io: Default::default(),
         };
         let mut cpu = I80186::new();
@@ -181,10 +197,12 @@ impl Machine {
         self.board.arcnet.tick(self.board.cycles);
         self.board.wd.tick(c);
         self.board.service_keyboard();
+        self.board.run_speech();
         // INT0 is shared by the keyboard (PA7) and disk (PA5); the kernel's
-        // handler polls PPI A port A. The COM9026 (PC5) is on INT2.
+        // handler polls PPI A port A. INT2 is shared by the COM9026 (PC5) and
+        // the speech chip (PC4).
         self.cpu.set_int_line(0, self.board.kbd_pending || self.board.wd.irq);
-        self.cpu.set_int_line(2, self.board.arcnet.irq());
+        self.cpu.set_int_line(2, self.board.arcnet.irq() || self.board.speech_irq());
         c
     }
 
@@ -231,6 +249,37 @@ impl Board {
         line < 3
     }
 
+    /// Take the speech samples generated since the last call (8 kHz, at most
+    /// the last ~8 seconds if nothing has been collecting audio). For tests.
+    pub fn take_speech_samples(&mut self) -> Vec<i16> {
+        self.run_speech();
+        let per = CPU_HZ as f64 * 80.0 / SPEECH_CLOCK as f64;
+        self.speech_base += self.speech_samples.len() as f64 * per;
+        std::mem::take(&mut self.speech_samples)
+    }
+
+    fn speech_irq(&self) -> bool {
+        self.speech.as_ref().is_some_and(|s| s.irq)
+    }
+
+    /// Bring the speech chip up to the current cycle, one sample per 80 of its clocks.
+    fn run_speech(&mut self) {
+        let Some(chip) = self.speech.as_mut() else { return };
+        let per = CPU_HZ as f64 * 80.0 / SPEECH_CLOCK as f64;
+        if self.speech_samples.is_empty() {
+            self.speech_base = self.speech_next;
+        }
+        while self.speech_next <= self.cycles as f64 {
+            // Nobody is taking audio (headless): keep only the recent past.
+            if self.speech_samples.len() >= 1 << 16 {
+                self.speech_samples.drain(..1 << 15);
+                self.speech_base += (1 << 15) as f64 * per;
+            }
+            self.speech_samples.push(chip.sample());
+            self.speech_next += per;
+        }
+    }
+
     /// Render the speaker output from the last call up to now as mono
     /// samples at `rate` Hz (box-filtered square wave, DC removed).
     pub fn take_audio(&mut self, rate: u32) -> Vec<f32> {
@@ -270,9 +319,36 @@ impl Board {
             self.audio_dc = y;
             out.push(y * 0.25);
         }
+        self.mix_speech(&mut out, per_sample);
         self.audio_cursor += (n as f64 * per_sample) as u64;
         self.speaker_edges = edges.collect(); // edges after this block's end
         out
+    }
+
+    /// Add the speech chip's samples (8 kHz) to a block of `take_audio`
+    /// output, holding each speech sample for its duration.
+    fn mix_speech(&mut self, out: &mut [f32], per_sample: f64) {
+        if self.speech.is_none() {
+            return;
+        }
+        self.run_speech();
+        let per = CPU_HZ as f64 * 80.0 / SPEECH_CLOCK as f64;
+        let mut used = 0;
+        for (i, o) in out.iter_mut().enumerate() {
+            let t = self.audio_cursor as f64 + i as f64 * per_sample;
+            if t < self.speech_base {
+                continue;
+            }
+            let k = ((t - self.speech_base) / per) as usize;
+            if let Some(&v) = self.speech_samples.get(k) {
+                *o += v as f32 / 32768.0 * 0.8;
+                used = k;
+            }
+        }
+        // Keep the sample still playing at the end of this block.
+        let drop = used.min(self.speech_samples.len());
+        self.speech_samples.drain(..drop);
+        self.speech_base += drop as f64 * per;
     }
 
     /// Queue a key press or release (raw code: key number, bit 7 = release).
@@ -507,6 +583,9 @@ impl Board {
             pa |= 0x80;
         }
         let mut pc = 0u8;
+        if self.speech_irq() {
+            pc |= 0x10;
+        }
         if self.arcnet.irq() {
             pc |= 0x20;
         }
@@ -618,6 +697,10 @@ impl Board {
             0xFAE5 => self.sio.ch[0].read_control(),
             0xFAE7 => self.sio.ch[1].read_control(),
             0xF880 => self.arcnet.read_status(),
+            0xFA01 if self.speech.is_some() => {
+                self.run_speech();
+                self.speech.as_mut().unwrap().read_status()
+            }
             0xF981 | 0xF983 | 0xF985 | 0xF987 => {
                 let inputs = self.ppi_a_inputs();
                 self.ppi_a.read(((port - 0xF981) >> 1) as u8, inputs)
@@ -637,6 +720,10 @@ impl Board {
             0xF801 => self.crtc.write_addr(val),
             0xF803 => self.crtc.write_data(val),
             0xF880 => self.arcnet.write_mask(val),
+            0xFA01 if self.speech.is_some() => {
+                self.run_speech();
+                self.speech.as_mut().unwrap().write(val)
+            }
             0xF882 => self.arcnet.command(val),
             0xF920 => self.kbd_pending = false,
             0xFAA0..=0xFAAE if port & 1 == 0 && self.has_wd => self.wd.write(((port - 0xFAA0) >> 1) as u8, val),

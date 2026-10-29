@@ -7,3 +7,4 @@ pub mod serial;
 pub mod wd1002;
 pub mod keyboard;
 pub mod rtc;
+pub mod tms5220;

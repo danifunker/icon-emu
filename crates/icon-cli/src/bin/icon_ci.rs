@@ -16,6 +16,7 @@
 //!   wait-text SLOT 'TEXT' [TIMEOUT]
 //!   idle SECONDS
 //!   screen [SLOT] | transcript [SLOT] | screenshot SLOT FILE.ppm
+//!   speech-wav SLOT FILE.wav   (the speech chip's recent output, 8 kHz)
 //!   hd-save FILE | floppy-save FILE
 //!   script FILE [--keep-going]     run icon-ci commands, one per line (# comments)
 //!   quit
@@ -106,6 +107,7 @@ fn exec(sock: &mut UnixStream, reader: &mut BufReader<UnixStream>, words: &[Stri
         "screen" | "transcript" => (w(0), json!({"slot": num(1, 0)})),
         "screenshot" => ("screenshot".into(), json!({"slot": num(1, 0), "path": w(2)})),
         "hd-save" | "floppy-save" => (w(0), json!({"path": w(1)})),
+        "speech-wav" => ("speech-wav".into(), json!({"slot": num(1, 1), "path": w(2)})),
         other => return Err(format!("unknown command {other:?} (icon-ci --help)")),
     };
     let data = request(sock, reader, &cmd, args)?;

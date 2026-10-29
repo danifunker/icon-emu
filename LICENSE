@@ -22,8 +22,9 @@ SOFTWARE.
 
 -------------------------------------------------------------------------------
 
-The 8086/80186 CPU core (crates/icon-core/src/cpu/i86.rs and i186.rs) is a port
-of MAME code and remains under the BSD 3-Clause license; see THIRD_PARTY.md.
+The 8086/80186 CPU core (crates/icon-core/src/cpu/i86.rs and i186.rs) and the
+TMS5220 speech synthesizer (crates/icon-core/src/devices/tms5220.rs) are ports
+of MAME code and remain under the BSD 3-Clause license; see THIRD_PARTY.md.
 
 This license covers the emulator's source code only. It does not cover the
 ICON boot ROM, QNX, or any Unisys/CEMCORP software or disk images, which are

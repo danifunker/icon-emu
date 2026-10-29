@@ -48,6 +48,17 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
+## MAME TMS5220 speech synthesizer
+
+`crates/icon-core/src/devices/tms5220.rs` is a Rust port of MAME's
+`src/devices/sound/tms5220.cpp` and the TMS5220 coefficient tables in
+`tms5110r.hxx`, <https://github.com/mamedev/mame>, reduced to what the ICON
+uses (Speak External, status, interrupt; no speech ROM).
+
+Copyright holders, as listed in those files: Frank Palazzolo, Aaron Giles,
+Jonathan Gevaryahu, Raphael Nabet, Couriersud and Michael Zapf. It is
+distributed under the same BSD 3-Clause license as the CPU core above.
+
 ## Test data (not distributed)
 
 `scripts/fetch_cpu_tests.py` downloads the SingleStepTests 8086 and 80286

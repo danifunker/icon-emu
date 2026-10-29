@@ -102,6 +102,24 @@ After an unclean stop, run `chkfsys 1` (and `chkfsys 3` on a 64 MB disk). It sho
 
 In the browser, the hard disk is saved to browser storage every 5 seconds and again when the fileserver powers off. **Download .img** makes a copy you can keep.
 
+## Speech
+
+ICON workstations have a TI TMS5220C speech chip; the emulator plays it through the page's sound. Fileservers have none. The Speech Administrator (`/sys/speech`) starts automatically on a workstation ✅.
+
+- `say FILE …` speaks phrase files ✅.
+- **The phrase file format** is a series of 12-byte frames: energy, pitch, k1–k10, each a parameter index (energy 0–15, where 15 is a stop frame; pitch 0–63, where 0 is unvoiced). `decode_phrase <FILE` lists a file as one frame per line, and `encode_phrase <TEXT >FILE` turns such a listing back into a file ✅. `convert_phrase` converts old TMS5220 "codepack" bitstreams.
+- **No phrase files ship with 4.10.01** or anywhere in the YorkU disk set. To try speech, make one:
+
+```
+echo 10 49 20 13 3 6 11 11 12 5 3 3 >1:/tmp/a.txt
+echo 14 44 24 19 8 2 5 8 9 6 3 4 >>1:/tmp/a.txt
+(repeat those two lines a few times for a longer sound)
+encode_phrase <1:/tmp/a.txt >1:/tmp/a.sp
+say 1:/tmp/a.sp
+```
+
+Those two frames are the voiced sound the boot ROM's speech self-test plays. Each frame lasts 25 ms.
+
 ## QDOS (MS-DOS)
 
 - Pseudo-disks are ordinary QNX files: `.pf` files are 160–360K floppy images, `.ph` files are hard-disk images up to 32 MB.

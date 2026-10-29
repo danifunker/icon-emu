@@ -38,7 +38,7 @@ make cli        # target/release/icon-cli and icon-ci
 
 The emulator is released under the **MIT License**; see [LICENSE](LICENSE).
 
-The 8086/80186 CPU core (`crates/icon-core/src/cpu/i86.rs`, `i186.rs`) is a port of MAME's i86 core. It remains under the **BSD 3-Clause License**; see [THIRD_PARTY.md](THIRD_PARTY.md). The project as a whole is therefore `MIT AND BSD-3-Clause`.
+The 8086/80186 CPU core (`crates/icon-core/src/cpu/i86.rs`, `i186.rs`) and the TMS5220 speech chip (`crates/icon-core/src/devices/tms5220.rs`) are ports of MAME code. They remain under the **BSD 3-Clause License**; see [THIRD_PARTY.md](THIRD_PARTY.md). The project as a whole is therefore `MIT AND BSD-3-Clause`.
 
 Neither license covers the ICON ROM, QNX, or any Unisys/CEMCORP software. `disks/hd64-factory.bin` is a blank, factory-prepared 64 MB disk template. It holds blocks written by the ICON's own `hdformat`/`fdisk` tools, including part of the QNX hard-disk loader, and is not covered by either license.
 
@@ -47,6 +47,7 @@ Neither license covers the ICON ROM, QNX, or any Unisys/CEMCORP software. `disks
 - **MAME**: the 8086/80186 CPU core is ported from MAME's `src/devices/cpu/i86`.
   - Core author: Carl. Earlier i86 work: Bryan McPhail, Oliver Bergmann, Fabrice Frances and David Hedley.
   - 80186 peripherals: Phill Harvey-Smith (rmnimbus driver), building on the Leland sound driver by Aaron Giles and Paul Leaman.
+  - The TMS5220C speech synthesizer is ported from MAME's `tms5220.cpp`: Frank Palazzolo, Aaron Giles, Jonathan Gevaryahu, Raphael Nabet, Couriersud and Michael Zapf.
   - <https://github.com/mamedev/mame>
 - **SingleStepTests** by Daniel Balsom (MIT): the 8086/80286 test suites used to check the CPU core. They are downloaded by `scripts/fetch_cpu_tests.py` and not included. <https://github.com/SingleStepTests>
 - **York University Computer Museum (YUCoM)**: preserved and supplied the ICON ROM dumps, manuals and system diskettes this work is based on.

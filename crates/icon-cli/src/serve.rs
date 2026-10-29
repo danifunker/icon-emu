@@ -204,6 +204,25 @@ impl Server {
             }
             "screen" => Ok(json!({"text": self.rig.screen(slot()).map_err(e)?})),
             "transcript" => Ok(json!({"text": self.rig.transcript(slot())})),
+            "speech-wav" => {
+                // The speech chip's recent output as an 8 kHz mono WAV file.
+                let path = s("path")?;
+                let pcm = self.rig.machine_mut(slot()).map_err(e)?.board.take_speech_samples();
+                let peak = pcm.iter().map(|&v| (v as i32).abs()).max().unwrap_or(0);
+                let mut wav = Vec::with_capacity(44 + pcm.len() * 2);
+                let n = (pcm.len() * 2) as u32;
+                wav.extend_from_slice(b"RIFF");
+                wav.extend_from_slice(&(36 + n).to_le_bytes());
+                wav.extend_from_slice(b"WAVEfmt ");
+                for v in [16u32, 0x0001_0001, 8000, 16000, 0x0010_0002] {
+                    wav.extend_from_slice(&v.to_le_bytes());
+                }
+                wav.extend_from_slice(b"data");
+                wav.extend_from_slice(&n.to_le_bytes());
+                pcm.iter().for_each(|v| wav.extend_from_slice(&v.to_le_bytes()));
+                std::fs::write(&path, wav).map_err(|x| x.to_string())?;
+                Ok(json!({"path": path, "samples": pcm.len(), "peak": peak}))
+            }
             "screenshot" => {
                 let path = s("path")?;
                 let rgba = self.rig.machine(slot()).map_err(e)?.board.render_rgba();
