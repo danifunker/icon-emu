@@ -204,6 +204,9 @@
     (5053-1 = even bytes, 5053-2 = odd). It is kept in this browser only. Untick "Use the same ROM for all
     devices" to give the LEXICON and the ICONs different ROMs. Each workstation boots over the
     network as node 15 + its number (16, 17, …).
+    <b>Workstations with the Rel 2.11 boot ROM need ICON System Software 4.10.05</b> on the fileserver:
+    the 4.10.01 workstation boot image crashes under that ROM. Install the 4.10.05 upgrade diskette with
+    <code>configure</code> (see docs/REBUILD.md, section 2b). The 5053 ISS 2 ROM works with either.
     To install: insert the <b>ICON Fileserver Boot Diskette</b> (4.01.00), add a hard disk, power on the fileserver and
     wait for <code>Login:</code>, then power on a workstation.
     Log in as <code>root</code> / <code>superuser</code>. Click a machine to give it the keyboard.

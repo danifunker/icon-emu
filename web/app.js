@@ -406,7 +406,7 @@ window.addEventListener("resize", layoutBus);
 // Known dumps, by SHA-1 of the 32 KB interleaved image.
 const KNOWN_ROMS = {
   "5d7f7b173f599edf1f0e8655852c3adafa61fd89": "stock 5053 ISS 2",
-  "3750cf6f203fe1a167b853e36d30114701b039eb": "Rel 2.11 (200-503/504-000)",
+  "3750cf6f203fe1a167b853e36d30114701b039eb": "Rel 2.11 (200-503/504-000) · workstations need system software 4.10.05",
 };
 const roms = { shared: null }; // { name, data, builtin? } per kind, plus "shared"
 let sameRom = local.get("icon-emu.same-rom") !== "0";
