@@ -1,6 +1,6 @@
 import init, {
   Network, blank_hard_disk_10mb, blank_floppy_640k,
-  disk_volumes, disk_list, disk_read, disk_put, disk_mkdir, disk_remove, disk_count, qnx_name, normalize_hard_disk,
+  disk_volumes, disk_view, disk_read, disk_put, disk_mkdir, disk_remove, disk_count, qnx_name, normalize_hard_disk,
   text_open, text_save,
 } from "./pkg/icon_web.js";
 
@@ -564,7 +564,7 @@ $("rom-same").addEventListener("change", (e) => {
 // take it out, edit it, put it back, as when swapping diskettes. The hard disk
 // only while every machine is off: the fileserver caches it, and a running
 // workstation may be mid-way through using it.
-const fl = { src: null, path: "/", edit: false, open: null }; // open: the file in the editor
+const fl = { src: null, path: "/", edit: false, open: null, sel: null, entries: null }; // open: the file in the editor; sel: the selected entry
 const fstatus = (msg, err = false) => { $("files-status").textContent = msg; $("files-status").classList.toggle("err", err); };
 const enote = (msg, err = false) => { $("ed-note").textContent = msg; $("ed-note").classList.toggle("err", err); };
 const anyOn = () => !!net && machines.some((m, i) => net.is_on(i));
@@ -610,56 +610,154 @@ function fbutton(label, onclick) {
   b.addEventListener("click", onclick);
   return b;
 }
+// Icons for the file manager (inline SVG, so they need no files).
+const ICONS = {
+  folder: '<svg class="fm-ico" viewBox="0 0 20 20"><path d="M2 5.5A1.5 1.5 0 0 1 3.5 4h4l1.6 1.8h7.4A1.5 1.5 0 0 1 18 7.3v7.7a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 2 15z" fill="#e8b84a" stroke="#b8862a"/><path d="M2 8h16" stroke="#c99a35"/></svg>',
+  folderOpen: '<svg class="fm-ico" viewBox="0 0 20 20"><path d="M2 5.5A1.5 1.5 0 0 1 3.5 4h4l1.6 1.8h7A1.5 1.5 0 0 1 17.6 7.3V9H5.2L2 16z" fill="#d9a63c" stroke="#b8862a"/><path d="M5 9h14l-3 7.5H2z" fill="#f2c95f" stroke="#b8862a" stroke-linejoin="round"/></svg>',
+  text: '<svg class="fm-ico" viewBox="0 0 20 20"><path d="M4.5 2h7.5l4 4v11.5a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-15a.5.5 0 0 1 .5-.5z" fill="#fff" stroke="#7d8a9c"/><path d="M12 2v4h4" fill="#e6eaf0" stroke="#7d8a9c"/><path d="M6.5 9h7M6.5 11.5h7M6.5 14h5" stroke="#4f7fd1" stroke-width="1.2"/></svg>',
+  file: '<svg class="fm-ico" viewBox="0 0 20 20"><path d="M4.5 2h7.5l4 4v11.5a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-15a.5.5 0 0 1 .5-.5z" fill="#eef1f5" stroke="#7d8a9c"/><path d="M12 2v4h4" fill="#dfe4eb" stroke="#7d8a9c"/><rect x="6.5" y="9" width="7" height="5.5" rx="1" fill="#9aa6b6"/></svg>',
+  floppy: '<svg class="fm-ico" viewBox="0 0 20 20"><rect x="2.5" y="2.5" width="15" height="15" rx="1.5" fill="#3d4f6b" stroke="#24324a"/><rect x="5.5" y="2.5" width="9" height="5.5" fill="#cfd6e0"/><rect x="11.5" y="3.5" width="2" height="3.5" fill="#3d4f6b"/><rect x="5" y="11" width="10" height="6.5" fill="#f4f6f9"/></svg>',
+  hd: '<svg class="fm-ico" viewBox="0 0 20 20"><rect x="2" y="5" width="16" height="10" rx="2" fill="#aeb8c6" stroke="#5d6878"/><circle cx="14.5" cy="12" r="1.2" fill="#3fbf4f"/><path d="M4.5 12h6" stroke="#5d6878" stroke-width="1.2"/></svg>',
+};
+const fl_expanded = new Set();  // folders opened in the tree
+const fl_collapsed = new Set(); // folders closed in the tree, even on the way to the open folder
+function icon(kind) {
+  const span = document.createElement("span");
+  span.className = "fm-item";
+  span.innerHTML = ICONS[kind];
+  return span;
+}
+function fselect(name) {
+  fl.sel = name;
+  for (const tr of $("files-table").rows) tr.classList.toggle("sel", tr.dataset.name === name);
+  const e = fl.entries && fl.entries.find((x) => x.name === name);
+  $("files-download").disabled = !e || e.dir;
+}
+function fgo(path) {
+  // Show the folder you go to: open it and every folder above it.
+  for (let p = path; p !== "/" && p; p = p.replace(/\/[^/]*$/, "") || "/") fl_collapsed.delete(p);
+  fl.path = path;
+  fl.sel = null;
+  frefresh();
+}
 function frefresh() {
   if (!$("files-panel").open) return;
   const srcs = fsources();
   const sel = $("files-src");
   const key = (s) => `${s.kind}:${s.offset}`;
   const keep = fl.src && srcs.find((s) => key(s) === key(fl.src));
+  if (!keep) { fl.path = "/"; fl_expanded.clear(); fl_collapsed.clear(); }
   fl.src = keep || srcs[0] || null;
-  if (!keep) fl.path = "/";
   sel.replaceChildren(...srcs.map((s) => new Option(s.label, key(s), false, fl.src && key(s) === key(fl.src))));
-  $("files-path").textContent = fl.path;
+  sel.hidden = srcs.length === 0;
   $("files-edit").setAttribute("aria-pressed", String(fl.edit));
   $("files-edit").textContent = fl.edit ? "Done editing" : "Edit";
   const table = $("files-table");
+  const tree = $("files-tree");
   table.replaceChildren();
+  tree.replaceChildren();
+  $("files-path").replaceChildren();
+  $("files-empty").hidden = true;
+  $("files-download").disabled = true;
+  $("files-up").disabled = !fl.src || fl.path === "/";
   if (!fl.src) {
+    fl.entries = null;
     fstatus(floppy || hardDisk
       ? "No ICON (QNX) files found. A diskette must be formatted for the ICON: New blank gives you one."
       : "Insert a diskette (New blank gives an empty one) or add a hard disk first.");
     return;
   }
-  let list;
-  try { list = JSON.parse(disk_list(fimage(fl.src), fl.src.offset, fl.path)); }
-  catch (e) { fl.path = "/"; fstatus(e.message, true); return; }
+  let view;
+  try { view = JSON.parse(disk_view(fimage(fl.src), fl.src.offset, fl.path, JSON.stringify([...fl_expanded]))); }
+  catch (e) { fl.path = "/"; fl.entries = null; fstatus(e.message, true); return; }
+  fl.entries = view.entries;
+
+  // Breadcrumbs: disk / folder / folder, each a link.
+  const crumbs = $("files-path");
+  const parts = fl.path.split("/").filter(Boolean);
+  const link = (label, path) => {
+    const a = document.createElement("a");
+    a.textContent = label;
+    a.addEventListener("click", () => fgo(path));
+    return a;
+  };
+  crumbs.append(link(fl.src.kind === "fd" ? "diskette" : "hard disk", "/"));
+  parts.forEach((p, i) => {
+    const sep = document.createElement("span");
+    sep.className = "sep";
+    sep.textContent = "/";
+    crumbs.append(sep, link(p, "/" + parts.slice(0, i + 1).join("/")));
+  });
+
+  // Folder tree: the disk at the top, folders below, ▸ / ▾ to open and close.
+  const addNode = (path, name, depth, deeper = true) => {
+    const row = document.createElement("div");
+    row.className = "fm-node" + (path === fl.path ? " current" : "");
+    row.style.paddingLeft = `${4 + depth * 14}px`;
+    const subs = view.tree[path];
+    const open = path === "/" || (!fl_collapsed.has(path) && (fl_expanded.has(path) || fl.path === path || fl.path.startsWith(path + "/")));
+    // A folder with no folders inside gets no ▸.
+    const leaf = path !== "/" && (subs ? subs.length === 0 : !deeper);
+    const twisty = document.createElement("span");
+    twisty.className = "fm-twisty";
+    twisty.textContent = leaf ? "" : open ? "▾" : "▸";
+    twisty.title = leaf ? "" : open ? "Collapse" : "Expand";
+    twisty.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (leaf) { fgo(path); return; }
+      if (open && path !== "/") {
+        fl_expanded.delete(path);
+        fl_collapsed.add(path);
+        if (fl.path.startsWith(path + "/")) fl.path = path; // don't hide the open folder
+      } else {
+        fl_collapsed.delete(path);
+        fl_expanded.add(path);
+      }
+      frefresh();
+    });
+    const label = icon(path === "/" ? (fl.src.kind === "fd" ? "floppy" : "hd") : open ? "folderOpen" : "folder");
+    label.append(name);
+    row.append(twisty, label);
+    row.addEventListener("click", () => fgo(path));
+    tree.append(row);
+    if (open && subs) for (const [n, d] of subs) addNode(path === "/" ? "/" + n : path + "/" + n, n, depth + 1, d);
+  };
+  addNode("/", fl.src.label, 0);
+
+  // The list.
   const kb = (n) => `${Math.round(n / 1024)} KB`;
   const why = readOnlyReason();
-  fstatus(`${list.entries.length} items · ${kb(list.free)} free of ${kb(list.total)}` + (why ? ` · read-only: ${why}` : ""));
-  for (const e of list.entries) {
+  fstatus(`${view.entries.length} item${view.entries.length === 1 ? "" : "s"} · ${kb(view.free)} free of ${kb(view.total)}` + (why ? ` · read-only: ${why}` : ""));
+  $("files-empty").hidden = view.entries.length > 0;
+  for (const e of view.entries) {
     const tr = table.insertRow();
+    tr.dataset.name = e.name;
     const name = tr.insertCell();
-    if (e.dir) {
-      const a = document.createElement("a");
-      a.className = "dir";
-      a.textContent = e.name + "/";
-      a.addEventListener("click", () => { fl.path = fjoin(fl.path, e.name); frefresh(); });
-      name.append(a);
-    } else name.textContent = e.name;
+    const item = icon(e.dir ? "folder" : e.text ? "text" : "file");
+    item.append(e.name);
+    name.append(item);
     name.title = e.attrs;
     const size = tr.insertCell();
     size.className = "num";
     size.textContent = e.dir ? "" : e.size.toLocaleString();
-    tr.insertCell().textContent = e.date;
+    const date = tr.insertCell();
+    date.className = "fm-date";
+    date.textContent = e.date;
     const act = tr.insertCell();
-    if (!e.dir) act.append(fbutton("Download", () => fdownload(e.name)));
+    act.className = "fm-act";
     // The root bitmap is QNX's free-space map: never offered for editing or deleting.
     const system = e.name === "bitmap" && fl.path === "/";
     if (fl.edit && !system) {
-      if (!e.dir) act.append(" ", fbutton("Edit", () => fopen(e.name)));
+      if (!e.dir && e.text) act.append(fbutton("Edit", () => fopen(e.name)));
       act.append(" ", fbutton("Delete", () => fdelete(e)));
     }
+    tr.addEventListener("click", () => fselect(e.name));
+    tr.addEventListener("dblclick", () => {
+      if (e.dir) { fl_expanded.add(fl.path); fgo(fjoin(fl.path, e.name)); }
+      else fdownload(e.name);
+    });
   }
+  if (fl.sel) fselect(fl.sel);
 }
 function fdownload(name) {
   try {
@@ -768,10 +866,8 @@ $("files-src").addEventListener("change", (e) => {
   fl.path = "/";
   frefresh();
 });
-$("files-up").addEventListener("click", () => {
-  fl.path = fl.path.replace(/\/[^/]*$/, "") || "/";
-  frefresh();
-});
+$("files-up").addEventListener("click", () => fgo(fl.path.replace(/\/[^/]*$/, "") || "/"));
+$("files-download").addEventListener("click", () => { if (fl.sel) fdownload(fl.sel); });
 $("files-mkdir").addEventListener("click", () => {
   if (!fl.src) return;
   const why = readOnlyReason();

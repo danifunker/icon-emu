@@ -97,16 +97,60 @@
   .typer summary { cursor: pointer; color: var(--text); }
   .typer textarea { display: block; width: 100%; margin: 8px 0; min-height: 120px; background: #111214; color: var(--text);
                     border: 1px solid #44423b; border-radius: 6px; padding: 8px; font: 12px ui-monospace, monospace; }
-  .files-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
-  .files select, .files .btn { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px; padding: 5px 11px; font: inherit; cursor: pointer; }
-  .files table { border-collapse: collapse; margin: 4px 0 8px; min-width: min(640px, 100%); }
-  .files td { padding: 3px 12px 3px 0; color: var(--text); white-space: nowrap; }
-  .files td.num { text-align: right; }
-  .files td button { padding: 2px 8px; }
-  .files a.dir { color: var(--text); cursor: pointer; text-decoration: underline; }
-  #files-status.err, #ed-note.err { color: var(--amber); }
-  .files button[aria-pressed="true"] { background: var(--amber); color: #2b2210; }
-  #ed-text { min-height: 320px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; white-space: pre; }
+  /* File manager: its own light "window", so it reads as a tool, not part of a machine. */
+  .fm-wrap { margin-top: 18px; max-width: 1100px; font-size: 13px; color: var(--muted); }
+  .fm-wrap > summary { cursor: pointer; color: var(--text); }
+  .fm { --fm-bg: #f6f7f9; --fm-pane: #eceff4; --fm-line: #c9d0da; --fm-text: #1d2430; --fm-muted: #5d6878;
+        --fm-title: #2c4466; --fm-sel: #cfe0fa; --fm-hover: #e4ecf8; --fm-accent: #2f6fd0;
+        margin-top: 8px; background: var(--fm-bg); color: var(--fm-text); border: 1px solid #8995a6; border-radius: 8px;
+        overflow: hidden; box-shadow: 0 10px 30px #0007; }
+  .fm button, .fm select, .fm .fm-btn { background: #fff; color: var(--fm-text); border: 1px solid var(--fm-line); border-radius: 5px;
+        padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; line-height: 1.3; }
+  .fm button:hover:not(:disabled), .fm .fm-btn:hover { border-color: var(--fm-accent); }
+  .fm button:disabled { opacity: .45; cursor: default; }
+  .fm button[aria-pressed="true"] { background: var(--amber); border-color: #b97516; color: #2b2210; }
+  .fm .fm-primary { background: var(--fm-accent); border-color: var(--fm-accent); color: #fff; }
+  .fm-title { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--fm-title); color: #fff; }
+  .fm-title-name { font-weight: 600; letter-spacing: .02em; }
+  .fm-title select { margin-left: auto; }
+  .fm-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--fm-line); background: #fbfcfd; }
+  .fm-gap { flex: 1; }
+  .fm-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .fm-crumbs a { color: var(--fm-accent); cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+  .fm-crumbs a:hover { background: var(--fm-hover); }
+  .fm-crumbs .sep { color: var(--fm-muted); }
+  .fm-body { display: grid; grid-template-columns: 220px minmax(0, 1fr); height: 380px; }
+  @media (max-width: 700px) { .fm-body { grid-template-columns: 1fr; height: auto; } .fm-tree { max-height: 160px; border-right: 0; border-bottom: 1px solid var(--fm-line); } .fm-list { max-height: 380px; } }
+  .fm-tree { background: var(--fm-pane); border-right: 1px solid var(--fm-line); overflow: auto; padding: 4px 0; }
+  .fm-node { display: flex; align-items: center; gap: 2px; padding: 2px 8px 2px 0; white-space: nowrap; cursor: pointer; }
+  .fm-node:hover { background: var(--fm-hover); }
+  .fm-node.current { background: var(--fm-sel); font-weight: 600; }
+  .fm-twisty { width: 18px; flex: none; text-align: center; color: var(--fm-muted); font-size: 13px; line-height: 18px; border-radius: 3px; }
+  .fm-twisty:hover { background: #d3dae5; color: var(--fm-text); }
+  .fm-list { overflow: auto; background: #fff; }
+  .fm-list table { width: 100%; border-collapse: collapse; }
+  .fm-list th { position: sticky; top: 0; background: #f1f3f6; color: var(--fm-muted); font-weight: 600; text-align: left;
+                padding: 5px 10px; border-bottom: 1px solid var(--fm-line); z-index: 1; }
+  .fm-list td { padding: 3px 10px; white-space: nowrap; border-bottom: 1px solid #f0f2f5; }
+  .fm-list .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .fm-list td.fm-date { color: var(--fm-muted); font-variant-numeric: tabular-nums; }
+  .fm-list tbody tr { cursor: default; user-select: none; }
+  .fm-list tbody tr:hover { background: var(--fm-hover); }
+  .fm-list tbody tr.sel { background: var(--fm-sel); }
+  .fm-list td.fm-act { text-align: right; }
+  .fm-list td.fm-act button { padding: 1px 8px; font-size: 12px; }
+  .fm-name { width: 55%; }
+  .fm-item { display: inline-flex; align-items: center; gap: 6px; }
+  .fm-ico { width: 18px; height: 18px; flex: none; }
+  .fm-empty { margin: 16px; color: var(--fm-muted); }
+  .fm-status { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 5px 10px;
+               border-top: 1px solid var(--fm-line); background: #f1f3f6; color: var(--fm-muted); }
+  #files-status.err, #ed-note.err { color: #b4441c; font-weight: 600; }
+  .fm-editor { border-top: 2px solid var(--fm-title); }
+  .fm-editor #ed-note { margin: 6px 10px; color: var(--fm-muted); }
+  #ed-text { display: block; width: calc(100% - 20px); margin: 0 10px 10px; min-height: 320px; background: #fff; color: var(--fm-text);
+             border: 1px solid var(--fm-line); border-radius: 5px; padding: 8px; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; white-space: pre; }
+  .fm-help { max-width: 1100px; }
   .typer button { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px; padding: 5px 11px; cursor: pointer; font: inherit; }
   .docs { margin-top: 18px; max-width: 1100px; font-size: 13px; color: var(--muted); }
   .docs h2 { font-size: 14px; color: var(--text); margin: 0 0 6px; }
@@ -219,41 +263,60 @@
     </section>
   </template>
 
-  <details class="typer files" id="files-panel">
+  <details class="fm-wrap" id="files-panel">
     <summary>Files: copy files between this computer and the diskette or hard disk</summary>
-    <div class="files-bar">
-      <select id="files-src"></select>
-      <button id="files-up" title="Up one folder">Up</button>
-      <code id="files-path">/</code>
-      <label><input id="files-upload" type="file" multiple hidden><span class="btn">Upload…</span></label>
-      <button id="files-mkdir">New folder</button>
-      <button id="files-refresh">Refresh</button>
-      <button id="files-edit" aria-pressed="false" title="Show Edit and Delete for each file">Edit</button>
-      <label title="Text files: this computer's line endings and UTF-8 on one side, the ICON's line endings and accents on the other"><input id="files-text" type="checkbox" checked> convert text</label>
-    </div>
-    <p id="files-status"></p>
-    <table id="files-table"></table>
-    <div id="files-editor" hidden>
-      <div class="files-bar">
-        <b id="ed-name"></b>
-        <label>Line ends <select id="ed-newline">
-          <option value="rs">ICON (RS)</option><option value="lf">LF</option><option value="crlf">CR LF</option>
-        </select></label>
-        <label>Accents <select id="ed-accents">
-          <option value="telidon">ICON (Telidon)</option><option value="cp437">IBM PC (code page 437)</option>
-        </select></label>
-        <button id="ed-underline" title="Underline the selected text (the ICON shows ⟦…⟧ underlined)">Underline ⟦…⟧</button>
-        <button id="ed-save">Save</button>
-        <button id="ed-close">Close</button>
+    <div class="fm">
+      <div class="fm-title">
+        <span class="fm-title-name">ICON Files</span>
+        <select id="files-src" title="Which disk"></select>
       </div>
-      <p id="ed-note"></p>
-      <textarea id="ed-text" spellcheck="false" wrap="off"></textarea>
+      <div class="fm-toolbar">
+        <button id="files-up" title="Up one folder">&#8593; Up</button>
+        <nav id="files-path" class="fm-crumbs" aria-label="Folder"></nav>
+        <span class="fm-gap"></span>
+        <button id="files-download" title="Download the selected file to this computer" disabled>Download</button>
+        <label class="fm-btn" title="Copy files from this computer into this folder"><input id="files-upload" type="file" multiple hidden>Upload&hellip;</label>
+        <button id="files-mkdir" title="Make a folder here">New folder</button>
+        <button id="files-refresh" title="Read the disk again">&#8635;</button>
+        <button id="files-edit" aria-pressed="false" title="Show Edit and Delete for each entry">Edit</button>
+      </div>
+      <div class="fm-body">
+        <nav id="files-tree" class="fm-tree" aria-label="Folders"></nav>
+        <div class="fm-list">
+          <table>
+            <thead><tr><th class="fm-name">Name</th><th class="num">Size</th><th>Modified</th><th></th></tr></thead>
+            <tbody id="files-table"></tbody>
+          </table>
+          <p id="files-empty" class="fm-empty" hidden>This folder is empty.</p>
+        </div>
+      </div>
+      <div class="fm-status">
+        <span id="files-status"></span>
+        <label title="Text files: this computer's line endings and UTF-8 on one side, the ICON's line endings and accents on the other"><input id="files-text" type="checkbox" checked> convert text</label>
+      </div>
+      <div id="files-editor" class="fm-editor" hidden>
+        <div class="fm-toolbar">
+          <b id="ed-name"></b>
+          <span class="fm-gap"></span>
+          <label>Line ends <select id="ed-newline">
+            <option value="rs">ICON (RS)</option><option value="lf">LF</option><option value="crlf">CR LF</option>
+          </select></label>
+          <label>Accents <select id="ed-accents">
+            <option value="telidon">ICON (Telidon)</option><option value="cp437">IBM PC (code page 437)</option>
+          </select></label>
+          <button id="ed-underline" title="Underline the selected text (the ICON shows ⟦…⟧ underlined)">Underline ⟦…⟧</button>
+          <button id="ed-save" class="fm-primary">Save</button>
+          <button id="ed-close">Close</button>
+        </div>
+        <p id="ed-note"></p>
+        <textarea id="ed-text" spellcheck="false" wrap="off"></textarea>
+      </div>
     </div>
-    <p>Download and Upload work at any time. <b>Edit</b> adds Edit and Delete to each entry; deleting a folder deletes everything in it.
-    The diskette can be changed at any time: the page takes it out, makes the change and puts it back, so don't change it
-    while the ICON is writing to it. The hard disk can only be changed while <b>every machine is off</b>.
-    Text is shown and saved with the ICON's accents (Telidon sequences) and line ends; ⟦ and ⟧ are its underline codes.
-    Names are made to fit QNX (up to 16 letters, digits, <code>_ . $</code>).</p>
+    <p class="fm-help">Double-click a folder to open it, or a file to download it. <b>Edit</b> adds Edit and Delete to each entry;
+    deleting a folder deletes everything in it. The diskette can be changed at any time: the page takes it out, makes the
+    change and puts it back, so don't change it while the ICON is writing to it. The hard disk can only be changed while
+    <b>every machine is off</b>. Text is shown and saved with the ICON's accents and line ends; ⟦ and ⟧ are its underline
+    codes. Names are made to fit QNX (up to 16 letters, digits, <code>_ . $</code>).</p>
   </details>
   <details class="typer">
     <summary>Type text into the selected machine</summary>

@@ -87,8 +87,13 @@ A new or loaded hard disk is used from the next time the fileserver is switched 
 
 **Files** (below the machines) copies files between your computer and the ICON's diskette or hard disk, without using the ICON itself.
 
-- Pick **Diskette** or **Hard disk** in the menu. Click a folder to open it; **Up** goes back.
-- **Download** saves a file to your computer. **Upload…** copies files from your computer into the open folder. **New folder** makes one.
+It looks and works like a file manager, in its own light window:
+- The menu in the title bar picks **Diskette** or **Hard disk**.
+- The **tree** on the left shows the folders. **▸** opens a folder in the tree and **▾** closes it; clicking a name opens that folder in the list.
+- The **path** above the list (*hard disk / help / editor*) is clickable, and **↑ Up** goes up one folder.
+- In the **list**, click to select, double-click a folder to open it, and double-click a file to download it. Icons tell folders, text files and other files apart.
+- **Download** saves the selected file to your computer. **Upload…** copies files from your computer into the open folder. **New folder** makes one. **↻** reads the disk again.
+- The status bar shows the number of items and the free space, and says when the disk is read-only.
 - **Edit** switches on editing. Each file then also gets **Edit** (open it in the text editor) and **Delete**. Deleting a folder deletes everything in it, after telling you how many files and folders that is. **Done editing** switches back.
 - **convert text** (leave it ticked) turns the ICON's text into ordinary text on your computer and back: line endings, French accents, and code page 437 characters. Binary files are never converted.
 - The diskette can be changed at any time. The hard disk can only be changed while **every machine is off**; while any is on, it is read-only.

@@ -97,6 +97,66 @@ pub fn disk_list(image: &[u8], offset: f64, path: &str) -> Result<String, JsErro
     ))
 }
 
+/// Everything the file manager shows in one call, as JSON: the folder at
+/// `path` (`entries` with name, dir, size, date, attrs, and `text` for files
+/// that are text), the volume's free / total bytes, and `tree`: for each
+/// folder in `expanded` (a JSON array of paths, plus `/` and the parents of
+/// `path`), its subfolders as `[name, has_subfolders]`.
+#[wasm_bindgen]
+pub fn disk_view(image: &[u8], offset: f64, path: &str, expanded: &str) -> Result<String, JsError> {
+    let mut img = image.to_vec();
+    let mut vol = files::open(&mut img, offset as u64).map_err(js_err)?;
+    let mut list = vol.list(path).map_err(js_err)?;
+    list.sort_by_key(|e| (!e.is_dir, e.name.to_lowercase()));
+    let mut entries = Vec::new();
+    for e in &list {
+        let text = !e.is_dir && vol.read_file(e, 4096).is_ok_and(|head| text::is_text(&head));
+        entries.push(format!(
+            "{{\"name\":{},\"dir\":{},\"size\":{},\"date\":{},\"attrs\":{},\"text\":{}}}",
+            json_str(&e.name),
+            e.is_dir,
+            e.size,
+            json_str(&e.modified().map(qnx2fs::format_date).unwrap_or_default()),
+            json_str(&e.describe()),
+            text
+        ));
+    }
+    // Folders whose subfolders the tree needs: the root, the open folder's
+    // ancestors and itself, and whatever the viewer expanded.
+    let mut want: Vec<String> = vec!["/".into()];
+    let mut acc = String::new();
+    for part in path.split('/').filter(|p| !p.is_empty()) {
+        acc = format!("{acc}/{part}");
+        want.push(acc.clone());
+    }
+    want.extend(expanded.trim_matches(|c| c == '[' || c == ']').split(',').map(|p| p.trim().trim_matches('"').to_string()).filter(|p| p.starts_with('/')));
+    want.sort();
+    want.dedup();
+    let mut tree = Vec::new();
+    for dir in &want {
+        if let Ok(children) = vol.list(dir) {
+            let mut subs: Vec<qnx2fs::Entry> = children.into_iter().filter(|e| e.is_dir).collect();
+            subs.sort_by_key(|e| e.name.to_lowercase());
+            // Each subfolder with whether it has folders of its own (for the tree's ▸).
+            let subs: Vec<String> = subs
+                .iter()
+                .map(|e| {
+                    let deeper = vol.list_dir(e, false).is_ok_and(|c| c.iter().any(|x| x.is_dir));
+                    format!("[{},{}]", json_str(&e.name), deeper)
+                })
+                .collect();
+            tree.push(format!("{}:[{}]", json_str(dir), subs.join(",")));
+        }
+    }
+    Ok(format!(
+        "{{\"free\":{},\"total\":{},\"entries\":[{}],\"tree\":{{{}}}}}",
+        vol.free_blocks() * 512,
+        vol.total_blocks() * 512,
+        entries.join(","),
+        tree.join(",")
+    ))
+}
+
 /// A file's contents; with `text`, QNX text gets LF line endings.
 #[wasm_bindgen]
 pub fn disk_read(image: &[u8], offset: f64, path: &str, text: bool) -> Result<Vec<u8>, JsError> {
