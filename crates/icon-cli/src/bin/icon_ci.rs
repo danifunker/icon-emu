@@ -23,8 +23,9 @@
 //! Files on the fileserver's disks. DISK is fd (the diskette), hd (the hard
 //! disk's first partition) or hd2 / hd3 (its other partitions). Reading works
 //! on a running machine; the diskette can be written any time, the hard disk
-//! only while the fileserver is off. --text converts line endings (QNX ends
-//! lines with RS); --replace overwrites an existing file.
+//! only while every machine is off. --text converts text: UTF-8 with LF line
+//! ends on this side, the ICON's RS line ends and accents on the other.
+//! --replace overwrites an existing file. rm deletes a folder with everything in it.
 //!   ls DISK [PATH]                 list a folder
 //!   get DISK PATH HOSTFILE [--text]
 //!   put DISK HOSTFILE PATH [--text] [--replace]

@@ -88,9 +88,12 @@ A new or loaded hard disk is used from the next time the fileserver is switched 
 **Files** (below the machines) copies files between your computer and the ICON's diskette or hard disk, without using the ICON itself.
 
 - Pick **Diskette** or **Hard disk** in the menu. Click a folder to open it; **Up** goes back.
-- **Upload…** copies files from your computer into the open folder. **Download** saves one to your computer. **New folder** and **Delete** do what they say.
-- **convert text line endings** turns the ICON's line endings into ordinary ones and back. Leave it ticked; binary files are left alone.
-- The diskette can be changed at any time. The hard disk can only be changed while the fileserver is off.
+- **Download** saves a file to your computer. **Upload…** copies files from your computer into the open folder. **New folder** makes one.
+- **Edit** switches on editing. Each file then also gets **Edit** (open it in the text editor) and **Delete**. Deleting a folder deletes everything in it, after telling you how many files and folders that is. **Done editing** switches back.
+- **convert text** (leave it ticked) turns the ICON's text into ordinary text on your computer and back: line endings, French accents, and code page 437 characters. Binary files are never converted.
+- The diskette can be changed at any time. The hard disk can only be changed while **every machine is off**; while any is on, it is read-only.
+
+The text editor shows the file the way the ICON does: accents as letters, and underlined text between **⟦** and **⟧** (the ICON's underline codes). **Underline ⟦…⟧** wraps the selected text. **Save** writes it back the way the file was written: its line ends, and its style of accents. Characters the ICON can't store, such as emoji, are refused with their names. If a file mixes conventions, the editor warns you that saving will change bytes you didn't edit.
 
 The [administrator notes](ADMIN.md#moving-files-in-and-out) have the details.
 

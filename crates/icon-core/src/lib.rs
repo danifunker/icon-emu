@@ -3,6 +3,8 @@
 pub mod cpu;
 pub mod devices;
 pub mod files;
+pub mod text;
+mod text_tables;
 pub mod machine;
 pub mod lan;
 pub mod session;

@@ -104,8 +104,13 @@ impl Server {
     fn edit<T>(&mut self, a: &Value, f: impl FnOnce(&mut Vec<u8>, u64) -> qnx2fs::Result<T>) -> Result<T, String> {
         let fd = a["disk"].as_str() == Some("fd");
         let running = self.rig.machine(FILESERVER).is_ok();
-        if !fd && running {
-            return Err("the fileserver is on: switch it off (power 0 off) before changing its hard disk".into());
+        let on: Vec<usize> = (0..self.rig.slots()).filter(|&i| self.rig.machine(i).is_ok()).collect();
+        if !fd && !on.is_empty() {
+            let slots: Vec<String> = on.iter().map(|i| i.to_string()).collect();
+            return Err(format!(
+                "the hard disk is read-only while any machine is on (on: slot {}); switch them off first (power N off)",
+                slots.join(", ")
+            ));
         }
         let (mut img, off) = self.volume(a)?;
         let out = f(&mut img, off).map_err(|x| x.to_string())?;
@@ -306,7 +311,7 @@ impl Server {
             // picks a hard-disk partition (default the first). Reads see the
             // disk as the running machine holds it. A diskette can be written
             // any time (it is swapped out and back in); the hard disk only
-            // while the fileserver is off, since QNX caches it.
+            // while every machine is off, since QNX caches it.
             "files" => {
                 let (img, off) = self.volume(a)?;
                 let mut img = img;
@@ -350,14 +355,15 @@ impl Server {
                 Ok(json!({"path": path}))
             }
             "file-rm" => {
+                // A folder goes with everything in it.
                 let path = s("path")?;
                 let now = icon_core::devices::rtc::icon_time(now_secs());
-                self.edit(a, |img, off| {
+                let (files, dirs) = self.edit(a, |img, off| {
                     let mut vol = files::open(img, off)?;
                     vol.set_clock(now);
-                    vol.remove(&path)
+                    files::remove_tree(&mut vol, &path)
                 })?;
-                Ok(json!({"path": path}))
+                Ok(json!({"path": path, "files": files, "folders": dirs}))
             }
             "quit" => {
                 self.quit = true;

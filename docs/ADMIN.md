@@ -39,16 +39,24 @@ QNX 2 has no `/home`. Paths name a node and a drive:
 Open **Files** below the machines on the web page. It shows the files on the diskette or the hard disk, and copies them to and from your computer directly.
 
 1. Pick **Diskette** or **Hard disk** in the menu. Click a folder to open it, **Up** to go back.
-2. **Upload…** copies files from your computer into the folder you're in. **Download** copies a file to your computer. **New folder** and **Delete** do what they say.
-3. Keep **convert text line endings** ticked for text files. QNX 2 ends each line with an RS character (0x1E) where other systems use a newline; the panel converts both ways. Untick it for programs and other binary files. (Binary files are left alone either way.)
+2. **Download** copies a file to your computer. **Upload…** copies files from your computer into the folder you're in. **New folder** makes a folder.
+3. Click **Edit** to edit or delete. Each file gets **Edit**, which opens it in a text editor on the page, and **Delete**. Deleting a folder deletes everything in it; the page first says how many files and folders that is. Click **Done editing** when you're finished.
+4. Keep **convert text** ticked. ICON text differs from ordinary text in three ways, and the panel converts all of them, both ways:
+   - lines end with an RS character (0x1E) instead of a newline;
+   - French accents are stored as Telidon sequences (é is `0x19 0x42 e`), as the ICON's editor and keyboard write them;
+   - bytes 128 to 255 are the IBM PC character set (code page 437), except `0x99` and `0x9A`, which switch underline on and off.
+
+   On your computer you get ordinary UTF-8 text. Binary files are left alone.
+
+The text editor shows accents as letters, and underlined text between **⟦** and **⟧**. Saving keeps the file's own line ends and accent style; you can change them with the two menus. Characters the ICON can't store (emoji, most non-Latin scripts) are refused, and the editor names them.
 
 Rules:
 - **The diskette** can be changed at any time. The page takes it out, makes the change and puts it back, like swapping diskettes by hand. Don't do it while the ICON is writing to the diskette.
-- **The hard disk** can only be changed while the fileserver is **switched off**. QNX keeps parts of the disk in memory and would write over the change. While it's on, the panel shows the disk as last saved, read-only.
+- **The hard disk** can only be changed while **every machine is off**. The fileserver keeps parts of the disk in memory and would write over the change, and a running workstation may be using it. While anything is on, the panel and the editor are read-only, showing the disk as last saved.
 - **Names** must fit QNX: up to 16 letters, digits, `_`, `.` or `$`. Other characters become `_`, and long names are shortened. The panel says when it renames something.
-- Uploaded files are dated with the emulated ICON clock: today's date in 1991, as files the ICON writes itself.
+- Files you upload or save are dated with the emulated ICON clock: today's date in 1991, as files the ICON writes itself.
 
-To give a student a file, upload it straight into their home folder on the hard disk (`/user/<login>`) with the fileserver off. Or put it on a diskette and have them `copy [1]2:/name name`.
+To give a student a file, upload it straight into their home folder on the hard disk (`/user/<login>`) with every machine off. Or put it on a diskette and have them `copy [1]2:/name name`.
 
 ### With diskette images
 

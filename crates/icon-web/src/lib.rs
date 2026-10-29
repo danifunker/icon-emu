@@ -39,6 +39,7 @@ pub fn blank_floppy_640k() -> Vec<u8> {
 // local wall-clock seconds, dated into 1991 as the emulated clock does.
 
 use icon_core::files::{self, qnx2fs};
+use icon_core::text;
 
 fn js_err(e: qnx2fs::Error) -> JsError {
     JsError::new(&e.to_string())
@@ -126,15 +127,72 @@ pub fn disk_mkdir(image: Vec<u8>, offset: f64, path: &str, now: f64) -> Result<V
     Ok(img)
 }
 
-/// Delete a file or an empty directory.
+/// Delete a file, or a folder with everything in it.
 #[wasm_bindgen]
 pub fn disk_remove(image: Vec<u8>, offset: f64, path: &str, now: f64) -> Result<Vec<u8>, JsError> {
     let mut img = image;
     {
         let mut vol = files::open(&mut img, offset as u64).map_err(js_err)?;
         vol.set_clock(icon_core::devices::rtc::icon_time(now as i64));
-        vol.remove(path).map_err(js_err)?;
+        files::remove_tree(&mut vol, path).map_err(js_err)?;
     }
+    Ok(img)
+}
+
+/// How many files and folders are inside a folder, as JSON `{"files", "folders"}`.
+#[wasm_bindgen]
+pub fn disk_count(image: &[u8], offset: f64, path: &str) -> Result<String, JsError> {
+    let mut img = image.to_vec();
+    let mut vol = files::open(&mut img, offset as u64).map_err(js_err)?;
+    let (f, d) = files::count_tree(&mut vol, path).map_err(js_err)?;
+    Ok(format!("{{\"files\":{f},\"folders\":{d}}}"))
+}
+
+fn newline_name(n: text::Newline) -> &'static str {
+    match n {
+        text::Newline::Rs => "rs",
+        text::Newline::Lf => "lf",
+        text::Newline::CrLf => "crlf",
+    }
+}
+
+/// Open a file for the text editor, as JSON: `binary`, or `text` with its
+/// `newline` ("rs" / "lf" / "crlf") and `accents` ("telidon" / "cp437") and
+/// `exact` (saving it unchanged gives back the same bytes).
+#[wasm_bindgen]
+pub fn text_open(image: &[u8], offset: f64, path: &str) -> Result<String, JsError> {
+    let data = files::read_file(&mut image.to_vec(), offset as u64, path, false).map_err(js_err)?;
+    Ok(match text::decode(&data) {
+        None => format!("{{\"binary\":true,\"size\":{}}}", data.len()),
+        Some(d) => format!(
+            "{{\"binary\":false,\"size\":{},\"text\":{},\"newline\":\"{}\",\"accents\":\"{}\",\"exact\":{}}}",
+            data.len(),
+            json_str(&d.text),
+            newline_name(d.format.newline),
+            if d.format.accents == text::Accents::Cp437 { "cp437" } else { "telidon" },
+            d.exact
+        ),
+    })
+}
+
+/// Save the editor's text back over the file (or as a new one), in the given
+/// line-ending and accent style. Fails, naming them, on characters the ICON
+/// can't store.
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn text_save(image: Vec<u8>, offset: f64, path: &str, body: &str, newline: &str, accents: &str, now: f64) -> Result<Vec<u8>, JsError> {
+    let format = text::Format {
+        newline: match newline {
+            "lf" => text::Newline::Lf,
+            "crlf" => text::Newline::CrLf,
+            _ => text::Newline::Rs,
+        },
+        accents: if accents == "cp437" { text::Accents::Cp437 } else { text::Accents::Telidon },
+    };
+    let bytes = text::encode(&body.replace("\r\n", "\n"), format).map_err(|bad| js_err(files::unstorable(&bad)))?;
+    let mut img = image;
+    let now = icon_core::devices::rtc::icon_time(now as i64);
+    files::write_file(&mut img, offset as u64, path, &bytes, false, true, now).map_err(js_err)?;
     Ok(img)
 }
 

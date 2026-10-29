@@ -60,13 +60,13 @@ These copy files between your computer and the ICON's disks directly, without ty
 | `ls DISK [PATH]` | List a folder (default `/`) |
 | `get DISK PATH HOSTFILE [--text]` | Copy a file to your computer |
 | `put DISK HOSTFILE PATH [--text] [--replace]` | Copy a file onto the disk |
-| `mkdir DISK PATH`, `rm DISK PATH` | Make a folder; delete a file or empty folder |
+| `mkdir DISK PATH`, `rm DISK PATH` | Make a folder; delete a file, or a folder with everything in it |
 
 - `DISK` is `fd` (the diskette), `hd` (the hard disk's first partition), or `hd2` / `hd3` (its other partitions on a 64 MB disk).
 - **Reading** works while the machine runs. It sees the disk as QNX has written it so far; something QNX still holds in memory may not be there yet.
 - **Writing the diskette** works at any time. The server takes the diskette out, changes it and puts it back, like swapping it by hand. Don't do it while QNX is writing to it.
-- **Writing the hard disk** only works while the fileserver is off (`power 0 off`, or before the first `power 0`). QNX caches the disk and would overwrite the change, so the server refuses.
-- `--text` converts line endings: QNX 2 ends lines with RS (0x1E). Binary files are left alone.
+- **Writing the hard disk** only works while **every machine is off** (`power N off`, or before the first `power`). The fileserver caches the disk and would overwrite the change, so the server refuses while anything is on, and says which slots are.
+- `--text` converts text both ways: UTF-8 with LF line ends on your side; RS (0x1E) line ends, Telidon accents (é is `0x19 0x42 e`), code page 437 and the underline codes `0x99` / `0x9A` on the ICON's. Characters the ICON can't store are refused. Binary files are left alone.
 - File names must fit QNX: 1 to 16 of `A-Z a-z 0-9 _ . $`.
 - Files are dated with the emulated clock (today's date in 1991).
 - `floppy-new` gives you a formatted diskette to `put` files on.

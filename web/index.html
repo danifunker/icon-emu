@@ -104,7 +104,9 @@
   .files td.num { text-align: right; }
   .files td button { padding: 2px 8px; }
   .files a.dir { color: var(--text); cursor: pointer; text-decoration: underline; }
-  #files-status.err { color: var(--amber); }
+  #files-status.err, #ed-note.err { color: var(--amber); }
+  .files button[aria-pressed="true"] { background: var(--amber); color: #2b2210; }
+  #ed-text { min-height: 320px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; white-space: pre; }
   .typer button { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px; padding: 5px 11px; cursor: pointer; font: inherit; }
   .docs { margin-top: 18px; max-width: 1100px; font-size: 13px; color: var(--muted); }
   .docs h2 { font-size: 14px; color: var(--text); margin: 0 0 6px; }
@@ -226,13 +228,32 @@
       <label><input id="files-upload" type="file" multiple hidden><span class="btn">Upload…</span></label>
       <button id="files-mkdir">New folder</button>
       <button id="files-refresh">Refresh</button>
-      <label><input id="files-text" type="checkbox" checked> convert text line endings</label>
+      <button id="files-edit" aria-pressed="false" title="Show Edit and Delete for each file">Edit</button>
+      <label title="Text files: this computer's line endings and UTF-8 on one side, the ICON's line endings and accents on the other"><input id="files-text" type="checkbox" checked> convert text</label>
     </div>
     <p id="files-status"></p>
     <table id="files-table"></table>
-    <p>The diskette can be changed at any time: the page takes it out, makes the change and puts it back,
-    like swapping diskettes, so don't change it while the ICON is writing to it. The hard disk can only be changed
-    while the fileserver is off. Names are made to fit QNX (up to 16 letters, digits, <code>_ . $</code>).</p>
+    <div id="files-editor" hidden>
+      <div class="files-bar">
+        <b id="ed-name"></b>
+        <label>Line ends <select id="ed-newline">
+          <option value="rs">ICON (RS)</option><option value="lf">LF</option><option value="crlf">CR LF</option>
+        </select></label>
+        <label>Accents <select id="ed-accents">
+          <option value="telidon">ICON (Telidon)</option><option value="cp437">IBM PC (code page 437)</option>
+        </select></label>
+        <button id="ed-underline" title="Underline the selected text (the ICON shows ⟦…⟧ underlined)">Underline ⟦…⟧</button>
+        <button id="ed-save">Save</button>
+        <button id="ed-close">Close</button>
+      </div>
+      <p id="ed-note"></p>
+      <textarea id="ed-text" spellcheck="false" wrap="off"></textarea>
+    </div>
+    <p>Download and Upload work at any time. <b>Edit</b> adds Edit and Delete to each entry; deleting a folder deletes everything in it.
+    The diskette can be changed at any time: the page takes it out, makes the change and puts it back, so don't change it
+    while the ICON is writing to it. The hard disk can only be changed while <b>every machine is off</b>.
+    Text is shown and saved with the ICON's accents (Telidon sequences) and line ends; ⟦ and ⟧ are its underline codes.
+    Names are made to fit QNX (up to 16 letters, digits, <code>_ . $</code>).</p>
   </details>
   <details class="typer">
     <summary>Type text into the selected machine</summary>

@@ -1,6 +1,7 @@
 import init, {
   Network, blank_hard_disk_10mb, blank_floppy_640k,
-  disk_volumes, disk_list, disk_read, disk_put, disk_mkdir, disk_remove, qnx_name, normalize_hard_disk,
+  disk_volumes, disk_list, disk_read, disk_put, disk_mkdir, disk_remove, disk_count, qnx_name, normalize_hard_disk,
+  text_open, text_save,
 } from "./pkg/icon_web.js";
 
 const FS = 0;
@@ -383,7 +384,7 @@ function power(slot) {
     if (slot === FS) syncFloppy();
     if (slot === FS && hardDisk) { syncHd(); idbPut("fileserver-hd", hardDisk); }
     net.power_off(slot);
-    if (slot === FS) frefresh();
+    filesPowerChanged();
     m.power.classList.remove("on");
     m.ctx.fillRect(0, 0, 640, 240);
     m.status.textContent = "off";
@@ -401,7 +402,7 @@ function power(slot) {
   }
   m.power.classList.add("on");
   m.power.blur();
-  if (slot === FS) frefresh();
+  filesPowerChanged();
   setFocus(slot);
 }
 
@@ -561,10 +562,12 @@ $("rom-same").addEventListener("change", (e) => {
 // ---- Files: copy files between this computer and the ICON's disks (the
 // qnx2fs crate, inside the emulator). The diskette can be changed at any time:
 // take it out, edit it, put it back, as when swapping diskettes. The hard disk
-// only while the fileserver is off, since QNX caches it and would overwrite
-// the change.
-const fl = { src: null, path: "/" }; // src: { kind: "fd" | "hd", offset, label }
+// only while every machine is off: the fileserver caches it, and a running
+// workstation may be mid-way through using it.
+const fl = { src: null, path: "/", edit: false, open: null }; // open: the file in the editor
 const fstatus = (msg, err = false) => { $("files-status").textContent = msg; $("files-status").classList.toggle("err", err); };
+const enote = (msg, err = false) => { $("ed-note").textContent = msg; $("ed-note").classList.toggle("err", err); };
+const anyOn = () => !!net && machines.some((m, i) => net.is_on(i));
 function hdImage() {
   syncHd();
   if (!hardDisk.normalized) { hardDisk.data = normalize_hard_disk(hardDisk.data); hardDisk.normalized = true; }
@@ -580,10 +583,16 @@ function fsources() {
   if (hardDisk) for (const v of JSON.parse(disk_volumes(hdImage()))) out.push({ kind: "hd", offset: v.offset, label: `Hard disk, ${v.label}` });
   return out;
 }
+// Why the selected disk can't be changed right now, or "" if it can.
+function readOnlyReason(src = fl.src) {
+  if (src && src.kind === "hd" && anyOn()) return "The hard disk can only be changed while every machine is off.";
+  return "";
+}
 // Apply a change to the selected disk: `edit(image) -> new image`.
 function fedit(edit) {
   const src = fl.src;
-  if (src.kind === "hd" && net && net.is_on(FS)) throw new Error("Switch the fileserver off before changing its hard disk.");
+  const why = readOnlyReason(src);
+  if (why) throw new Error(why);
   const data = edit(fimage(src));
   if (src.kind === "fd") {
     floppy.data = data;
@@ -595,6 +604,12 @@ function fedit(edit) {
   }
 }
 const fjoin = (dir, name) => (dir === "/" ? "/" : dir + "/") + name;
+function fbutton(label, onclick) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.addEventListener("click", onclick);
+  return b;
+}
 function frefresh() {
   if (!$("files-panel").open) return;
   const srcs = fsources();
@@ -605,6 +620,8 @@ function frefresh() {
   if (!keep) fl.path = "/";
   sel.replaceChildren(...srcs.map((s) => new Option(s.label, key(s), false, fl.src && key(s) === key(fl.src))));
   $("files-path").textContent = fl.path;
+  $("files-edit").setAttribute("aria-pressed", String(fl.edit));
+  $("files-edit").textContent = fl.edit ? "Done editing" : "Edit";
   const table = $("files-table");
   table.replaceChildren();
   if (!fl.src) {
@@ -617,9 +634,8 @@ function frefresh() {
   try { list = JSON.parse(disk_list(fimage(fl.src), fl.src.offset, fl.path)); }
   catch (e) { fl.path = "/"; fstatus(e.message, true); return; }
   const kb = (n) => `${Math.round(n / 1024)} KB`;
-  let note = `${list.entries.length} items · ${kb(list.free)} free of ${kb(list.total)}`;
-  if (fl.src.kind === "hd" && net && net.is_on(FS)) note += " · the fileserver is on: this shows the disk as last saved, and it can't be changed";
-  fstatus(note);
+  const why = readOnlyReason();
+  fstatus(`${list.entries.length} items · ${kb(list.free)} free of ${kb(list.total)}` + (why ? ` · read-only: ${why}` : ""));
   for (const e of list.entries) {
     const tr = table.insertRow();
     const name = tr.insertCell();
@@ -636,17 +652,12 @@ function frefresh() {
     size.textContent = e.dir ? "" : e.size.toLocaleString();
     tr.insertCell().textContent = e.date;
     const act = tr.insertCell();
-    if (!e.dir) {
-      const b = document.createElement("button");
-      b.textContent = "Download";
-      b.addEventListener("click", () => fdownload(e.name));
-      act.append(b);
-    }
-    if (e.name !== "bitmap" || fl.path !== "/") {
-      const b = document.createElement("button");
-      b.textContent = "Delete";
-      b.addEventListener("click", () => fdelete(e));
-      act.append(" ", b);
+    if (!e.dir) act.append(fbutton("Download", () => fdownload(e.name)));
+    // The root bitmap is QNX's free-space map: never offered for editing or deleting.
+    const system = e.name === "bitmap" && fl.path === "/";
+    if (fl.edit && !system) {
+      if (!e.dir) act.append(" ", fbutton("Edit", () => fopen(e.name)));
+      act.append(" ", fbutton("Delete", () => fdelete(e)));
     }
   }
 }
@@ -662,14 +673,96 @@ function fdownload(name) {
   } catch (e) { fstatus(e.message, true); }
 }
 function fdelete(e) {
-  if (!confirm(`Delete ${fjoin(fl.path, e.name)}?`)) return;
+  const path = fjoin(fl.path, e.name);
+  let what = path;
+  if (e.dir) {
+    try {
+      const n = JSON.parse(disk_count(fimage(fl.src), fl.src.offset, path));
+      const parts = [];
+      if (n.files) parts.push(`${n.files} file${n.files === 1 ? "" : "s"}`);
+      if (n.folders) parts.push(`${n.folders} folder${n.folders === 1 ? "" : "s"}`);
+      what = `the folder ${path}` + (parts.length ? ` and the ${parts.join(" and ")} in it` : " (empty)");
+    } catch (err) { fstatus(err.message, true); return; }
+  }
+  if (!confirm(`Delete ${what}? This can't be undone.`)) return;
   try {
-    fedit((img) => disk_remove(img, fl.src.offset, fjoin(fl.path, e.name), localTime()));
+    fedit((img) => disk_remove(img, fl.src.offset, path, localTime()));
+    if (fl.open && (fl.open.path === path || fl.open.path.startsWith(path + "/"))) fclose(true);
     frefresh();
-  } catch (err) { fstatus(err.message.includes("not empty") ? "Delete the folder's files first." : err.message, true); }
+  } catch (err) { fstatus(err.message, true); }
 }
+
+// The text editor: the file is decoded in memory (ICON line ends, Telidon
+// accents, code page 437, underline codes) and saved back in the same style.
+const NEWLINE_NAMES = { rs: "ICON line ends (RS)", lf: "LF line ends", crlf: "CR LF line ends" };
+const ACCENT_NAMES = { telidon: "ICON accents (Telidon)", cp437: "IBM PC accents (code page 437)" };
+function fopen(name) {
+  if (fl.open && fl.open.dirty && !confirm(`Discard your changes to ${fl.open.path}?`)) return;
+  const path = fjoin(fl.path, name);
+  let t;
+  try { t = JSON.parse(text_open(fimage(fl.src), fl.src.offset, path)); }
+  catch (e) { fstatus(e.message, true); return; }
+  if (t.binary) { fstatus(`${name} isn't a text file (${t.size.toLocaleString()} bytes); use Download instead.`, true); return; }
+  fl.open = { src: fl.src, path, dirty: false };
+  $("ed-name").textContent = path;
+  $("ed-text").value = t.text;
+  $("ed-newline").value = t.newline;
+  $("ed-accents").value = t.accents;
+  $("files-editor").hidden = false;
+  const why = readOnlyReason(fl.src);
+  $("ed-text").readOnly = !!why;
+  $("ed-save").disabled = !!why;
+  let note = `${t.size.toLocaleString()} bytes · ${NEWLINE_NAMES[t.newline]} · ${ACCENT_NAMES[t.accents]}.`;
+  if (!t.exact) note += " Careful: this file mixes conventions (for example two kinds of line end), so saving it will change bytes you didn't edit.";
+  if (why) note += " Read-only: " + why;
+  enote(note, !t.exact);
+  $("ed-text").focus();
+}
+// A machine went on or off: the hard disk may have become read-only, or writable.
+function filesPowerChanged() {
+  frefresh();
+  if (!fl.open) return;
+  const why = readOnlyReason(fl.open.src);
+  $("ed-text").readOnly = !!why;
+  $("ed-save").disabled = !!why;
+  if (why) enote("Read-only now: " + why + " Your changes stay here until you close the editor.", true);
+}
+function fclose(force = false) {
+  if (!force && fl.open && fl.open.dirty && !confirm(`Discard your changes to ${fl.open.path}?`)) return;
+  fl.open = null;
+  $("files-editor").hidden = true;
+}
+$("ed-text").addEventListener("input", () => { if (fl.open) fl.open.dirty = true; });
+$("ed-close").addEventListener("click", () => fclose());
+$("ed-underline").addEventListener("click", () => {
+  const ta = $("ed-text");
+  if (ta.readOnly) return;
+  const [a, b] = [ta.selectionStart, ta.selectionEnd];
+  ta.setRangeText("⟦" + ta.value.slice(a, b) + "⟧", a, b, "end");
+  if (fl.open) fl.open.dirty = true;
+  ta.focus();
+});
+$("ed-save").addEventListener("click", () => {
+  const o = fl.open;
+  if (!o) return;
+  const prev = fl.src;
+  try {
+    fl.src = o.src;
+    fedit((img) => text_save(img, o.src.offset, o.path, $("ed-text").value, $("ed-newline").value, $("ed-accents").value, localTime()));
+    o.dirty = false;
+    enote(`Saved ${o.path} at ${new Date().toLocaleTimeString()}.`);
+  } catch (e) {
+    enote(e.message, true);
+  } finally {
+    fl.src = prev;
+  }
+  frefresh();
+});
+window.addEventListener("beforeunload", (e) => { if (fl.open && fl.open.dirty) e.preventDefault(); });
+
 $("files-panel").addEventListener("toggle", frefresh);
 $("files-refresh").addEventListener("click", frefresh);
+$("files-edit").addEventListener("click", () => { fl.edit = !fl.edit; frefresh(); });
 $("files-src").addEventListener("change", (e) => {
   fl.src = fsources().find((s) => `${s.kind}:${s.offset}` === e.target.value) || null;
   fl.path = "/";
@@ -681,6 +774,8 @@ $("files-up").addEventListener("click", () => {
 });
 $("files-mkdir").addEventListener("click", () => {
   if (!fl.src) return;
+  const why = readOnlyReason();
+  if (why) { fstatus(why, true); return; }
   const asked = prompt("Name of the new folder:");
   if (!asked) return;
   const name = qnx_name(asked);
@@ -694,6 +789,8 @@ $("files-upload").addEventListener("change", async (e) => {
   const list = [...e.target.files];
   e.target.value = "";
   if (!fl.src || !list.length) return;
+  const why = readOnlyReason();
+  if (why) { fstatus(why, true); return; }
   const text = $("files-text").checked;
   const done = [], renamed = [];
   try {

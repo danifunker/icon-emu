@@ -62,10 +62,37 @@ pub fn select(image: &[u8], part: usize) -> Result<u64, String> {
     })
 }
 
-/// A file's contents; with `text`, QNX text gets LF line endings.
+/// A file's contents. With `text`, an ICON text file comes back as UTF-8 with
+/// LF line ends (accents and underline codes decoded, see [`crate::text`]);
+/// anything else is returned as it is.
 pub fn read_file(image: &mut Vec<u8>, offset: u64, path: &str, text: bool) -> qnx2fs::Result<Vec<u8>> {
     let data = open(image, offset)?.get(path)?;
-    Ok(if text && qnx2fs::looks_like_rs_text(&data) { qnx2fs::rs_to_lf(&data) } else { data })
+    if !text {
+        return Ok(data);
+    }
+    Ok(match crate::text::decode(&data) {
+        Some(d) if d.exact => d.text.into_bytes(),
+        _ if qnx2fs::looks_like_rs_text(&data) => qnx2fs::rs_to_lf(&data),
+        _ => data,
+    })
+}
+
+/// Host text as the ICON stores it: UTF-8 is encoded (RS line ends, Telidon
+/// accents); other text only gets RS line ends; binary data is unchanged.
+pub fn host_text_to_icon(data: &[u8]) -> qnx2fs::Result<Vec<u8>> {
+    match std::str::from_utf8(data) {
+        Ok(s) if crate::text::is_text(data) => {
+            crate::text::encode(&s.replace("\r\n", "\n"), crate::text::ICON_DEFAULT).map_err(|bad| unstorable(&bad))
+        }
+        _ if looks_like_text(data) => Ok(qnx2fs::lf_to_rs(data)),
+        _ => Ok(data.to_vec()),
+    }
+}
+
+/// The error for characters the ICON has no way to store.
+pub fn unstorable(bad: &[char]) -> qnx2fs::Error {
+    let list: Vec<String> = bad.iter().map(|c| format!("{c} (U+{:04X})", *c as u32)).collect();
+    qnx2fs::Error::InvalidData(format!("the ICON can't store these characters: {}", list.join(", ")))
 }
 
 /// Write a file. With `text`, host text gets QNX's RS line endings; with
@@ -89,8 +116,47 @@ pub fn write_file(
             }
         }
     }
-    let body = if text && looks_like_text(data) { qnx2fs::lf_to_rs(data) } else { data.to_vec() };
+    let body = if text { host_text_to_icon(data)? } else { data.to_vec() };
     vol.put(path, &body, &qnx2fs::NewEntry::default())
+}
+
+/// Files and folders inside the folder at `path` (not counting it).
+pub fn count_tree<D: std::io::Read + std::io::Seek>(vol: &mut Volume<D>, path: &str) -> qnx2fs::Result<(usize, usize)> {
+    let (mut files, mut dirs) = (0, 0);
+    for e in vol.list(path)? {
+        if e.is_dir {
+            let (f, d) = count_tree(vol, &e.path)?;
+            files += f;
+            dirs += d + 1;
+        } else {
+            files += 1;
+        }
+    }
+    Ok((files, dirs))
+}
+
+/// Delete a file, or a folder and everything in it. Returns (files, folders) deleted.
+pub fn remove_tree<D: std::io::Read + std::io::Write + std::io::Seek>(
+    vol: &mut Volume<D>,
+    path: &str,
+) -> qnx2fs::Result<(usize, usize)> {
+    let e = vol.lookup(path)?;
+    if path.trim_matches('/').is_empty() {
+        return Err(qnx2fs::Error::InvalidData("the top folder of a disk can't be deleted".into()));
+    }
+    let mut n = (0, 0);
+    if e.is_dir {
+        for child in vol.list(path)? {
+            let (f, d) = remove_tree(vol, &child.path)?;
+            n.0 += f;
+            n.1 += d;
+        }
+        n.1 += 1;
+    } else {
+        n.0 += 1;
+    }
+    vol.remove(path)?;
+    Ok(n)
 }
 
 /// Whether `data` looks like host text (LF or CR LF lines) that should get
@@ -126,6 +192,30 @@ mod tests {
         }
         let mut vol = open(&mut img, 0).unwrap();
         assert_eq!(qnx2fs::rs_to_lf(&vol.get("/notes").unwrap()), text);
+        assert!(vol.check().unwrap().is_clean());
+    }
+
+    #[test]
+    fn host_text_gets_icon_accents_and_folders_delete_recursively() {
+        assert_eq!(host_text_to_icon("café\r\nça\n".as_bytes()).unwrap(), b"caf\x19\x42e\x1e\x19\x4bca\x1e");
+        assert_eq!(host_text_to_icon("é".as_bytes()).unwrap(), b"\x19\x42e");
+        assert!(host_text_to_icon("emoji 😀\n".as_bytes()).is_err());
+        let bin = [0u8, 1, 2, b'\n', 0xFF];
+        assert_eq!(host_text_to_icon(&bin).unwrap(), bin);
+
+        let mut img = Disk::formatted_floppy_640k();
+        let mut vol = open(&mut img, 0).unwrap();
+        vol.set_clock(700_000_000);
+        vol.mkdir("/a", &NewEntry::default()).unwrap();
+        vol.mkdir("/a/b", &NewEntry::default()).unwrap();
+        vol.put("/a/one", b"1", &NewEntry::default()).unwrap();
+        vol.put("/a/b/two", b"2", &NewEntry::default()).unwrap();
+        let free = vol.free_blocks();
+        assert_eq!(count_tree(&mut vol, "/a").unwrap(), (2, 1));
+        assert_eq!(remove_tree(&mut vol, "/a").unwrap(), (2, 2));
+        assert!(vol.lookup("/a").is_err());
+        assert!(vol.free_blocks() > free);
+        assert!(remove_tree(&mut vol, "/").is_err());
         assert!(vol.check().unwrap().is_clean());
     }
 
