@@ -67,7 +67,7 @@ function setupMachine(slot) {
 function keyStrip(slot) {
   const firefoxish = !KEYBOARD_LOCK;
   const keys = [
-    ["ACTION ◀", 0x45, firefoxish ? "End" : "End · F11", "Left ACTION key (also the left mouse button while captured)"],
+    ["ACTION ◀", 0x45, firefoxish ? "End · Ctrl+F12" : "End · F11", "Left ACTION key: End or Ctrl+F12 (F11 in exclusive mode); also the left mouse button while captured"],
     ["ACTION ▶", 0x52, firefoxish ? "PgDn" : "PgDn · F12", "Right ACTION key (also the right mouse button while captured)"],
     ["HELP", 0x3d, "Ins", "HELP key"],
     ["RUBOUT", 0x42, "Del", "RUBOUT: deletes the character under the cursor"],
@@ -142,6 +142,12 @@ const ARROWS = { ArrowUp: 0x5c, ArrowLeft: 0x5f, ArrowDown: 0x60, ArrowRight: 0x
 const LOCKS = { CapsLock: 0x3f, ScrollLock: 0x2f /* CURSOR LOCK */ };
 const held = new Map(); // key -> slot it was pressed on
 
+// Shortcuts for ICON keys the browser keeps (Firefox takes F11): the PC key
+// with Ctrl, sent to the ICON without the Ctrl.
+const CTRL_ALIASES = { F12: 0x45 /* Ctrl+F12 = ACTION (left), F11's key */ };
+const ICON_CTRL = 0x21;
+const aliasDown = new Map(); // PC key code -> { slot, key, ctrlWasDown }
+
 function send(slot, code) { if (net && net.is_on(slot)) net.key(slot, code); }
 
 function releaseAll() { for (const [k, s] of held) send(s, k | 0x80); held.clear(); }
@@ -155,6 +161,25 @@ function keyEvent(e, down) {
     return;
   }
   const slot = focus;
+  // Ctrl+F12 and friends: release the ICON's Ctrl while the aliased key is down.
+  if (down && e.ctrlKey && !e.altKey && e.code in CTRL_ALIASES) {
+    e.preventDefault();
+    if (e.repeat || aliasDown.has(e.code)) return;
+    const key = CTRL_ALIASES[e.code];
+    const ctrlWasDown = held.has(ICON_CTRL);
+    if (ctrlWasDown) send(held.get(ICON_CTRL), ICON_CTRL | 0x80);
+    send(slot, key);
+    aliasDown.set(e.code, { slot, key, ctrlWasDown });
+    return;
+  }
+  if (!down && aliasDown.has(e.code)) {
+    e.preventDefault();
+    const a = aliasDown.get(e.code);
+    aliasDown.delete(e.code);
+    send(a.slot, a.key | 0x80);
+    if (a.ctrlWasDown && e.ctrlKey && held.has(ICON_CTRL)) send(held.get(ICON_CTRL), ICON_CTRL);
+    return;
+  }
   if (e.code in LOCKS) {
     e.preventDefault();
     if (down && !e.repeat) {

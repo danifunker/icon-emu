@@ -52,7 +52,7 @@ Keys that differ from a PC keyboard:
 
 | ICON key | Press |
 |---|---|
-| ACTION (left / right) | End / Page Down, the mouse buttons while captured, F11 / F12 in exclusive mode (Chrome, Edge), or the key strip |
+| ACTION (left / right) | End / Page Down, or Ctrl+F12 / F12; the mouse buttons while captured; F11 / F12 in exclusive mode (Chrome, Edge); or the key strip |
 | PAUSE | Pause (holds scrolling; `<hold>` shows) |
 | Esc | Esc; in Firefox and Safari, **Ctrl+[** (Esc releases the mouse there) |
 | HELP | Insert |
