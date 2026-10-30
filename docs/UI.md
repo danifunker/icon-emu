@@ -46,11 +46,14 @@ The small line under each machine's name shows its state ("off", or its node num
   - In **Chrome and Edge** this is exclusive mode: the screen goes full-screen and the keyboard is locked, so **Esc and F11 go to the ICON**. Only **Ctrl+Alt** leaves. (Holding Esc for two seconds is the browser's own emergency exit.)
   - In **Firefox and Safari** the browser always lets go of the mouse when you press Esc, and keeps F11 for itself; no page can change that. Your keys keep going to the ICON afterwards (only the trackball is released; click the screen to capture it again). For Esc on the ICON, press **Ctrl+[**, which the ICON's own keyboard turns into Esc. For ACTION, use End / Page Down.
 
+Under each screen, a **key strip** shows the ICON keys a PC keyboard doesn't have, with the PC key to press underneath each (ACTION, HELP, RUBOUT, CLR, PAUSE, ESC, CUR LOCK). Click a button to press that key on the machine: useful for keys the browser keeps for itself, such as F11 in Firefox. Hold an ACTION button down to hold the key. CUR LOCK lights up while it is on.
+
 Keys that differ from a PC keyboard:
 
 | ICON key | Press |
 |---|---|
-| ACTION (left / right) | F11 / F12 (in exclusive mode), End / Page Down, or the mouse buttons while captured |
+| ACTION (left / right) | End / Page Down, the mouse buttons while captured, F11 / F12 in exclusive mode (Chrome, Edge), or the key strip |
+| PAUSE | Pause (holds scrolling; `<hold>` shows) |
 | Esc | Esc; in Firefox and Safari, **Ctrl+[** (Esc releases the mouse there) |
 | HELP | Insert |
 | RUBOUT | Delete |

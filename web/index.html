@@ -51,6 +51,16 @@
   .pedestal { margin: 12px auto 0; width: 62%; background: linear-gradient(var(--beige-dark), #a39b85);
               border-radius: 6px 6px 12px 12px; padding: 10px 14px; display: flex; align-items: center; gap: 14px;
               border: 1px solid var(--beige-edge); }
+  /* The ICON keys a PC keyboard lacks, with the PC key to press. */
+  .keystrip { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .keystrip button { flex: 1 1 0; min-width: 62px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+                     padding: 3px 4px; border-radius: 5px; border: 1px solid #9d957f; background: linear-gradient(#f3eee2, #ddd5c2);
+                     color: #2b2a26; font: 600 10.5px/1.2 system-ui, sans-serif; cursor: pointer; }
+  .keystrip button span { font-weight: 400; color: #6c675c; font-size: 10px; }
+  .keystrip button:active { background: linear-gradient(#ddd5c2, #f3eee2); }
+  .keystrip button[aria-pressed="true"] { background: var(--amber); border-color: #b97516; }
+  .keystrip button[aria-pressed="true"] span { color: #2b2210; }
+  .console.collapsed + .keystrip { display: none; }
   .kbd { margin-top: 12px; height: 26px; background: linear-gradient(#cfc8b5, #bdb5a0); border-radius: 6px;
          border: 1px solid var(--beige-edge); display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; }
   .ball { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #8a8a8a, #2d2d2d); }

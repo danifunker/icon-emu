@@ -58,6 +58,53 @@ function setupMachine(slot) {
   m.notice.hidden = true;
   m.canvas.parentElement.append(m.notice);
   m.canvas.addEventListener("click", () => capture(slot));
+  m.canvas.parentElement.after(keyStrip(slot));
+}
+
+// ---- Key strip: the ICON keys a PC keyboard lacks (or the browser takes),
+// each with the PC key to press; clicking one sends it. Hold ACTION down as
+// long as the button is held. CUR LOCK toggles like the real key.
+function keyStrip(slot) {
+  const firefoxish = !KEYBOARD_LOCK;
+  const keys = [
+    ["ACTION ◀", 0x45, firefoxish ? "End" : "End · F11", "Left ACTION key (also the left mouse button while captured)"],
+    ["ACTION ▶", 0x52, firefoxish ? "PgDn" : "PgDn · F12", "Right ACTION key (also the right mouse button while captured)"],
+    ["HELP", 0x3d, "Ins", "HELP key"],
+    ["RUBOUT", 0x42, "Del", "RUBOUT: deletes the character under the cursor"],
+    ["CLR", 0x53, "Home", "CLR key"],
+    ["PAUSE", 0x3e, "Pause", "PAUSE: holds scrolling (the <hold> sign); press again to carry on"],
+    ["ESC", 0x01, firefoxish ? "Ctrl+[" : "Esc", firefoxish ? "Esc. In this browser Esc releases the mouse; Ctrl+[ types Esc on the ICON" : "Esc"],
+    ["CUR LOCK", 0x2f, "ScrLk", "CURSOR LOCK: makes the keypad and arrow keys move the cursor", true],
+  ];
+  const strip = document.createElement("div");
+  strip.className = "keystrip";
+  strip.title = "ICON keys: click to press. The small text is the key to use on this keyboard.";
+  for (const [name, code, pc, help, lock] of keys) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.title = help;
+    b.innerHTML = `<b>${name}</b><span>${pc}</span>`;
+    if (lock) {
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setFocus(slot);
+        const locks = machines[slot].locks;
+        locks[code] = !locks[code];
+        send(slot, locks[code] ? code : code | 0x80);
+        b.setAttribute("aria-pressed", String(!!locks[code]));
+      });
+    } else {
+      let down = false;
+      const up = () => { if (down) { down = false; send(slot, code | 0x80); } };
+      b.addEventListener("pointerdown", (e) => { e.stopPropagation(); setFocus(slot); down = true; send(slot, code); });
+      b.addEventListener("pointerup", up);
+      b.addEventListener("pointerleave", up);
+      b.addEventListener("click", (e) => e.stopPropagation());
+    }
+    strip.append(b);
+  }
+  return strip;
 }
 function slotOf(el) { return machines.findIndex((m) => m && m.canvas === el); }
 
@@ -115,6 +162,8 @@ function keyEvent(e, down) {
       const locks = machines[slot].locks;
       locks[k] = !locks[k];
       send(slot, locks[k] ? k : k | 0x80);
+      const lb = machines[slot].root.querySelector(`.keystrip button[aria-pressed]`);
+      if (lb && k === 0x2f) lb.setAttribute("aria-pressed", String(!!locks[k]));
     }
     return;
   }
