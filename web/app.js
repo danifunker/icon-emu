@@ -149,7 +149,7 @@ setInterval(() => { for (const s of new Set(held.values())) send(s, 0x7f); }, 50
 const KEYBOARD_LOCK = !!(navigator.keyboard && navigator.keyboard.lock) && !!document.documentElement.requestFullscreen;
 const RELEASE_HINT = KEYBOARD_LOCK
   ? "Press <b>Ctrl+Alt</b> to leave. Esc and F11 go to the ICON."
-  : "Press <b>Ctrl+Alt</b> to release. This browser always releases on Esc too; for Esc and F11 on the ICON, use Chrome or Edge.";
+  : "Press <b>Ctrl+Alt</b> to release. This browser also releases the mouse on Esc (pages can't stop that), but your keys keep going to the ICON. For Esc on the ICON press <b>Ctrl+[</b>; for ACTION, End / Page Down.";
 let releasing = false;
 function release() {
   releasing = true;
@@ -220,6 +220,10 @@ document.addEventListener("pointerlockchange", () => {
     releaseAll();
     // The browser let go of the mouse (Esc, or switching windows): leave full screen too.
     if (document.fullscreenElement && !releasing) release();
+    // Firefox and Safari release on Esc by themselves: say what still works.
+    if (!releasing && !KEYBOARD_LOCK && machines[focus]) {
+      showNotice(machines[focus], "Mouse released (this browser always does on Esc). Your keys still go to this ICON: <b>Ctrl+[</b> types Esc. Click the screen to capture the mouse again.", [], 5000);
+    }
   }
 });
 
