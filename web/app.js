@@ -82,6 +82,8 @@ const KEYS = {
   Insert: 0x3d /* HELP */, Pause: 0x3e, Space: 0x40, AltLeft: 0x41, AltRight: 0x41,
   Delete: 0x42 /* RUBOUT */, Backslash: 0x43,
   F11: 0x45 /* ACTION (left) */, F12: 0x52 /* ACTION (right) */,
+  // Browsers keep F11 for themselves outside exclusive mode, so ACTION is on these too.
+  End: 0x45 /* ACTION (left) */, PageDown: 0x52 /* ACTION (right) */,
   F1: 0x47, F2: 0x48, F3: 0x49, F4: 0x4a, F5: 0x4b, F6: 0x4c, F7: 0x4d, F8: 0x4e,
   F9: 0x4f, F10: 0x50, Home: 0x53 /* CLR */,
   NumpadDivide: 0x54, NumpadMultiply: 0x55, NumpadAdd: 0x56, Numpad7: 0x57, Numpad8: 0x58,
@@ -100,10 +102,9 @@ function releaseAll() { for (const [k, s] of held) send(s, k | 0x80); held.clear
 function keyEvent(e, down) {
   if (!net || e.metaKey || e.target.tagName === "INPUT") return;
   // Ctrl+Alt releases a captured keyboard and mouse.
-  if (down && document.pointerLockElement && e.ctrlKey && e.altKey) {
+  if (down && (document.pointerLockElement || document.fullscreenElement) && e.ctrlKey && e.altKey) {
     e.preventDefault();
-    releaseAll();
-    document.exitPointerLock();
+    release();
     return;
   }
   const slot = focus;
@@ -141,7 +142,43 @@ setInterval(() => { for (const s of new Set(held.values())) send(s, 0x7f); }, 50
 // trackball) and gives it the keyboard. The first time, a notice explains this
 // before anything is captured; afterwards a short reminder shows instead.
 // Ctrl+Alt releases; browsers also always release pointer lock on Esc.
-const RELEASE_HINT = "Press <b>Ctrl+Alt</b> to release (Esc also works).";
+// Exclusive mode: in browsers with the Keyboard Lock API (Chrome, Edge) the
+// screen goes full-screen with the keyboard locked, so Esc and F11 reach the
+// ICON and only Ctrl+Alt leaves (holding Esc for 2 s is the browser's own
+// emergency exit). Elsewhere it is mouse capture only, and Esc always releases.
+const KEYBOARD_LOCK = !!(navigator.keyboard && navigator.keyboard.lock) && !!document.documentElement.requestFullscreen;
+const RELEASE_HINT = KEYBOARD_LOCK
+  ? "Press <b>Ctrl+Alt</b> to leave. Esc and F11 go to the ICON."
+  : "Press <b>Ctrl+Alt</b> to release. This browser always releases on Esc too; for Esc and F11 on the ICON, use Chrome or Edge.";
+let releasing = false;
+function release() {
+  releasing = true;
+  releaseAll();
+  if (KEYBOARD_LOCK) navigator.keyboard.unlock();
+  if (document.pointerLockElement) document.exitPointerLock();
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  setTimeout(() => { releasing = false; });
+}
+// Called from a click: full screen and pointer lock are both requested within
+// that click; the keyboard lock follows once full screen is on. The screen's
+// CRT frame goes full-screen (not the canvas, whose 640x240 pixels would be
+// letterboxed at 8:3); CSS keeps the picture at 4:3 inside it.
+function enterExclusive(m) {
+  if (KEYBOARD_LOCK) {
+    m.canvas.parentElement.requestFullscreen({ navigationUI: "hide" })
+      .then(() => navigator.keyboard.lock())
+      .catch((e) => console.warn("exclusive mode: full screen / keyboard lock refused", e));
+  }
+  m.canvas.requestPointerLock();
+}
+document.addEventListener("fullscreenchange", () => {
+  const fs = document.fullscreenElement;
+  // Leaving full screen (the browser's long-press Esc) leaves exclusive mode too.
+  if (!fs && document.pointerLockElement && !releasing) release();
+  // If the mouse capture didn't take during the switch, ask again now (allowed in full screen).
+  const canvas = fs && fs.querySelector("canvas");
+  if (canvas && !document.pointerLockElement) canvas.requestPointerLock();
+});
 function showNotice(m, html, buttons = [], ms = 0) {
   clearTimeout(m.noticeTimer);
   m.notice.innerHTML = html;
@@ -160,7 +197,7 @@ function capture(slot) {
   const m = machines[slot];
   if (!net || !net.is_on(slot) || document.pointerLockElement === m.canvas) return;
   setFocus(slot);
-  if (local.get("icon-emu.capture-explained")) { m.canvas.requestPointerLock(); return; }
+  if (local.get("icon-emu.capture-explained")) { enterExclusive(m); return; }
   showNotice(m,
     `<div><b>Capture keyboard and mouse?</b></div>
      <div>Your keystrokes go to this machine, the mouse moves its trackball, and the mouse buttons are its two ACTION keys.</div>
@@ -168,7 +205,7 @@ function capture(slot) {
     [["Capture", () => {
       local.set("icon-emu.capture-explained", "1");
       m.notice.hidden = true;
-      m.canvas.requestPointerLock();
+      enterExclusive(m);
     }], ["Not now", () => { m.notice.hidden = true; }, true]]);
 }
 document.addEventListener("pointerlockchange", () => {
@@ -179,7 +216,11 @@ document.addEventListener("pointerlockchange", () => {
     if (on) showNotice(m, `Keyboard and mouse captured. ${RELEASE_HINT}`, [], 3000);
     else if (m.notice.classList.contains("toast")) m.notice.hidden = true;
   });
-  if (!locked) releaseAll();
+  if (!locked) {
+    releaseAll();
+    // The browser let go of the mouse (Esc, or switching windows): leave full screen too.
+    if (document.fullscreenElement && !releasing) release();
+  }
 });
 
 // ---- Trackball (while captured)

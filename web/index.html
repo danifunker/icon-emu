@@ -30,6 +30,9 @@
            background: #050505; border-radius: 10px; box-shadow: 0 0 18px #0009 inset; }
   .console { max-width: 520px; margin: 0 auto 14px; }
   .console.collapsed canvas { display: none; }
+  /* Exclusive mode: the captured screen fills the display, letterboxed. */
+  .crt:fullscreen { display: flex; align-items: center; justify-content: center; background: #000; padding: 0; border-radius: 0; box-shadow: none; }
+  .crt:fullscreen canvas { width: min(100vw, calc(100vh * 4 / 3)); height: auto; aspect-ratio: 4 / 3; border-radius: 0; }
 
   .chassis { background: linear-gradient(var(--beige-dark), #a9a18b); border-radius: 8px; padding: 12px 14px;
              display: flex; align-items: center; gap: 14px; flex-wrap: wrap; border: 1px solid var(--beige-edge); }
@@ -355,8 +358,9 @@
     When it shows <code>Login:</code>, power on a workstation and log in as <code>root</code> / <code>superuser</code>.
     The <a href="https://github.com/danifunker/icon-emu/blob/main/docs/REBUILD.md">rebuild guide</a> takes you through the whole install.</p>
     <p><b>Keyboard and mouse:</b> click a machine to type on it. Click its screen to capture the mouse as the trackball;
-    the mouse buttons are the two ACTION keys. <b>Ctrl+Alt</b> (or Esc) lets go.
-    F11 / F12 = ACTION, Insert = HELP, Delete = RUBOUT, Scroll Lock = CURSOR LOCK, Home = CLR.</p>
+    the mouse buttons are the two ACTION keys. In Chrome and Edge the screen goes full-screen and every key, Esc and F11 included,
+    goes to the ICON; <b>Ctrl+Alt</b> leaves (other browsers also let go on Esc).
+    F11 / F12 or End / Page Down = ACTION, Insert = HELP, Delete = RUBOUT, Scroll Lock = CURSOR LOCK, Home = CLR.</p>
     <p><b>Files:</b> open <b>Files</b> above to copy files between this computer and the diskette or hard disk.
     <b>New blank</b> inserts an empty, formatted 640K diskette. See <a href="https://github.com/danifunker/icon-emu/blob/main/docs/ADMIN.md#moving-files-in-and-out">moving files in and out</a>.</p>
     <p><b>Hard disk:</b> saved in this browser automatically; download a copy after each step you care about.

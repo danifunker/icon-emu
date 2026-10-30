@@ -42,13 +42,15 @@ The small line under each machine's name shows its state ("off", or its node num
 ## Keyboard and trackball
 
 - **Click a machine** to type on it. Its frame lights up.
-- **Click its screen** to capture the mouse as well. Moving the mouse moves the trackball, and the two buttons are the two ACTION keys. Press **Ctrl+Alt** to let go (Esc also works).
+- **Click its screen** to capture the mouse as well. Moving the mouse moves the trackball, and the two buttons are the two ACTION keys.
+  - In **Chrome and Edge** this is exclusive mode: the screen goes full-screen and the keyboard is locked, so **Esc and F11 go to the ICON**. Only **Ctrl+Alt** leaves. (Holding Esc for two seconds is the browser's own emergency exit.)
+  - In **Firefox and Safari** the browser always lets go when you press Esc, and keeps F11 for itself; Ctrl+Alt also lets go. Use End / Page Down for ACTION there.
 
 Keys that differ from a PC keyboard:
 
 | ICON key | Press |
 |---|---|
-| ACTION (left / right) | F11 / F12, or the mouse buttons while captured |
+| ACTION (left / right) | F11 / F12 (in exclusive mode), End / Page Down, or the mouse buttons while captured |
 | HELP | Insert |
 | RUBOUT | Delete |
 | CURSOR LOCK | Scroll Lock |
