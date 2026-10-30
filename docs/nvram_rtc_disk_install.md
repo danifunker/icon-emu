@@ -154,6 +154,30 @@ At boot, kernel init (`009C:4F6A`–`5690`) copies words into the sysblock (far 
 E82E 5173 3C02 5173 3C02 2838 442C 0041 3D3C 0300 1001 F4F4 0001 FFFF FFFF FFFF
 ```
 
+**(c) Two images read from a real 1 MB ICON with a chip programmer (2025).** The files store each word **low byte first**, so the bytes `7D 06` are w0 = 067D. Each was decoded with `icon-cli nvram`. The fileserver one boots icon-emu to `Login:` (Rel 2.11 ROM, `--ram-kb 1024`), and `nv_config` run there prints what the real machine printed.
+
+* As delivered: a factory workstation. Node 254, boots only from the network (server 1), ws_boot. The hardware serial number is set equal to the software one.
+
+  ```
+  E67D 0358 0CBC 0358 0CBC 2838 442D 0041 3C3C 0300 FE01 F0F0 0001 EBFA FFFF FFFF
+  ```
+* The same board set up as the network fileserver: node 1, server 1, every loader enabled, hardware serial 707-870712-867. Its w0 bit 2 is still 1, so the floppy loader looks for the 1797, which isn't fitted, and it boots network → hard disk.
+
+  ```
+  067D 7777 3363 0358 0CBC 2838 442D 0441 3C3C 0300 0101 F0F0 0101 EBFA FFFF FFFF
+  ```
+
+The bench tests that went with these dumps (one bit flipped at a time, on the real machine) agree with §1.3 throughout. They add:
+* w0 bit 2: with it clear, the fileserver boots its floppy through the WD1002 (`7916` = floppy, then hard disk, no network). With it set, the floppy is skipped.
+* w0 bit 10 clear on this 1 MB machine stops the self-test at **Diag error 50**, "One megabyte upgrade RAM card failure". This agrees with the emulator's 1 MB preset, which sets bit 10.
+* w0 bits 0–1 = 0 or 3 with bit 11 clear (no valid memory size): the machine hangs on the diagnostics screen. Bit 11 set (384 KB with bits = 1): bright text, then a hang.
+* w0 bit 4 clear: Diag error 2b (baud-rate counter A). Bit 3 clear: the 1797 floppy test fails. Bit 7: the "keyboard" line. Bits 5, 6, 8, 9 and 15: no visible change.
+* w1–w4: each bit moves the digit the packing in §1.3 predicts. w2 bit 15 is unused.
+* w10, w12 low nibble, w13 bits 1–3: as in §1.3 (node 0 gives "Invalid node number (0)").
+* w5–w9: R0 bit 7 scrambles the picture, R4 changes cause sync problems, and R6 bit 6 makes the screen taller.
+* Real CRTC values differ from the ROM defaults: R2 = 2D (not 2C), R5 = 04 (00 as delivered), R7 = 3C (Roland CC-141; 3D = ICON Colour). The palette is F0F0, not F4F4. w12 bits 8–15 = 01 and w13 = EBFA have no known effect.
+* In icon-emu, flipping w0 bits 6, 9 and 10, w12 bit 8, or w13 bits 0, 4, 6–8 and 12 changes nothing in `nv_config`'s output. Its "Parallel port" line stays "no", so that line doesn't come from these bits.
+
 Notes:
 * The fileserver role comes from: node ∈ {1, 245}, or (node ≠ 254 and w0 bit 2 = 0) (`machine_test` `0x77A`, `set_boot_type` `0x1AB`).
 * `machine_test +f` returns 1 (cluster / network fileserver) when w10.lo == own node, and 2 (storage fileserver) otherwise (`0x1C3`–`0x1F3`).

@@ -180,6 +180,20 @@ pub mod presets {
         };
     }
 
+    /// The built-in image for a network slot: the fileserver in slot 0,
+    /// otherwise a workstation as node 15 + slot booting from server 1.
+    pub fn for_slot(slot: usize, ram_kb: u32) -> [u16; 16] {
+        let mut nv = if slot == 0 {
+            fileserver()
+        } else {
+            let mut nv = workstation();
+            nv[10] = (((15 + slot) as u16) << 8) | 1; // own node ID, boot server 1
+            nv
+        };
+        set_ram_kb(&mut nv, ram_kb);
+        nv
+    }
+
     /// ICON fileserver, node 1: floppy then hard disk, 512 KB.
     pub fn fileserver() -> [u16; 16] {
         [

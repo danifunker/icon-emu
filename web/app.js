@@ -1,7 +1,7 @@
 import init, {
   Network, blank_hard_disk_10mb, blank_floppy_640k,
   disk_volumes, disk_view, disk_read, disk_put, disk_mkdir, disk_remove, disk_count, disk_copy, qnx_name, normalize_hard_disk,
-  text_open, text_save, watcom_unfixed, fix_watcom,
+  text_open, text_save, watcom_unfixed, fix_watcom, nvram_decode, nvram_set,
 } from "./pkg/icon_web.js";
 
 const FS = 0;
@@ -10,6 +10,7 @@ const $ = (id) => document.getElementById(id);
 const local = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
 };
 
 let net = null;
@@ -29,7 +30,7 @@ const KINDS = {
 // are cloned from a template. Each entry holds that machine's elements.
 const machines = [{
   kind: "lexicon", root: $("m0"), canvas: $("screen0"), status: $("status0"), pwr: $("pwr0"),
-  trouble: $("trouble0"), power: $("power0"),
+  trouble: $("trouble0"), power: $("power0"), nv: $("nv0"),
 }];
 function addMachine(slot, kind) {
   const root = $("ws-template").content.firstElementChild.cloneNode(true);
@@ -39,7 +40,8 @@ function addMachine(slot, kind) {
   machines[slot] = {
     kind, root, canvas: root.querySelector("canvas"), status: root.querySelector(".status"),
     pwr: root.querySelector(".pwr"), trouble: root.querySelector(".trouble"), power: root.querySelector(".power"),
-    tap: root.querySelector(".tap"), drop: root.querySelector(".drop"),
+    tap: root.querySelector(".tap"), drop: root.querySelector(".drop"), nv: root.querySelector(".nv-open"),
+    title: root.querySelector(".ws-title"),
   };
   setupMachine(slot);
 }
@@ -52,6 +54,7 @@ function setupMachine(slot) {
   m.activity = 0;
   m.root.addEventListener("mousedown", () => setFocus(slot));
   m.power.addEventListener("click", (e) => { e.stopPropagation(); power(slot); });
+  m.nv.addEventListener("click", (e) => { e.stopPropagation(); nvOpen(slot); });
   // Capture notices sit over the screen.
   m.notice = document.createElement("div");
   m.notice.className = "notice";
@@ -153,7 +156,7 @@ function send(slot, code) { if (net && net.is_on(slot)) net.key(slot, code); }
 function releaseAll() { for (const [k, s] of held) send(s, k | 0x80); held.clear(); }
 
 function keyEvent(e, down) {
-  if (!net || e.metaKey || e.target.tagName === "INPUT") return;
+  if (!net || e.metaKey || e.target.tagName === "INPUT" || e.target.closest?.("dialog")) return;
   // Ctrl+Alt releases a captured keyboard and mouse.
   if (down && (document.pointerLockElement || document.fullscreenElement) && e.ctrlKey && e.altKey) {
     e.preventDefault();
@@ -532,6 +535,7 @@ function addNode(kind) {
   const slot = machines.length;
   if (net.slots() <= slot) net.add_node(kind);
   addMachine(slot, kind);
+  nvMark(slot);
   saveNodes();
   layoutBus();
 }
@@ -548,6 +552,7 @@ $("node-remove").addEventListener("click", () => {
   if (net.is_on(slot)) { alert(`Power off node ${15 + slot} first.`); return; }
   net.remove_last_node();
   machines.pop().root.remove();
+  local.del(NV_KEY(slot));
   if (focus === slot) setFocus(FS);
   saveNodes();
   layoutBus();
@@ -1173,6 +1178,179 @@ function pumpTyping() {
 }
 
 // ---- Main loop
+// ---- NVRAM: each machine's 16-word settings chip (boot order, node number,
+// memory, monitor...). A slot uses the built-in settings until it is given its
+// own NVRAM; that is kept in this browser with whatever the ICON writes to it,
+// as the real EEPROM keeps it. Files are 32 bytes, each word low byte first,
+// as a chip programmer reads the NMC9306.
+const NV_KEY = (slot) => `icon-emu.nvram.${slot}`;
+const toHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+const fromHex = (s) => new Uint8Array(s.match(/../g).map((x) => parseInt(x, 16)));
+const YES_NO = { kind: "check" };
+const NV_FIELDS = {
+  loaders: { label: "Boot from", kind: "loaders" },
+  board: { label: "Board", kind: "select", options: [["fileserver", "Fileserver (floppy through the WD1002-05)"], ["workstation", "Workstation (floppy through the 1797)"]] },
+  ram: { label: "Memory", kind: "select", options: [["128", "128 KB"], ["256", "256 KB"], ["384", "384 KB"], ["512", "512 KB"], ["1024", "1 MB (CEMCORP card)"]] },
+  "local-floppy": { label: "Local floppy", ...YES_NO },
+  "serial-ports": { label: "Serial ports", ...YES_NO },
+  rtc: { label: "Real-time clock", ...YES_NO },
+  keyboard: { label: "Keyboard", ...YES_NO },
+  speech: { label: "Speech chip", ...YES_NO },
+  node: { label: "Node number", kind: "number", max: 255 },
+  server: { label: "Boot server", kind: "number", max: 255 },
+  "boot-file": { label: "Boot file type", kind: "number", max: 15 },
+  monitor: { label: "Monitor", kind: "select", options: [["rgb", "Colour RGB"], ["icon-colour", "ICON Colour"], ["roland-colour", "Roland Colour CC-141"], ["icon-mono", "ICON Monochrome"], ["roland-mono", "Roland Monochrome MB-121A"]] },
+  "hw-serial": { label: "Hardware serial", kind: "text" },
+  "sw-serial": { label: "Software serial", kind: "text" },
+  palette: { label: "Palette", kind: "text" },
+  crtc: { label: "CRTC R0–R9", kind: "text" },
+};
+const LOADER_NAMES = [["floppy", "floppy"], ["network", "network"], ["hd", "hard disk"], ["rom", "ROM slot"]];
+let nvSlot = null;
+function nvDecode(slot) { return JSON.parse(nvram_decode(net.nvram(slot))); }
+function nvSave(slot) {
+  if (net.has_own_nvram(slot)) local.set(NV_KEY(slot), toHex(net.nvram(slot)));
+  else local.del(NV_KEY(slot));
+  nvMark(slot);
+}
+// A machine with its own NVRAM shows it on its button; workstations show their node.
+function nvMark(slot) {
+  const m = machines[slot];
+  if (!m || !net) return;
+  m.nv.classList.toggle("own", net.has_own_nvram(slot));
+  if (m.title) {
+    const node = nvDecode(slot).fields.find((f) => f.name === "node").value;
+    m.title.textContent = `${KINDS[m.kind].title} ${slot} · node ${node}`;
+  }
+}
+function nvOpen(slot) {
+  if (!net) return;
+  nvSlot = slot;
+  nvRender();
+  if (!$("nv").open) $("nv").showModal();
+}
+function nvChange(name, value) {
+  try {
+    net.set_nvram(nvSlot, nvram_set(net.nvram(nvSlot), name, value));
+    nvSave(nvSlot);
+    nvRender();
+  } catch (e) {
+    nvRender();
+    nvNote(String(e.message || e), true);
+  }
+}
+function nvNote(text, warn) {
+  $("nv-note").textContent = text;
+  $("nv-note").classList.toggle("warn", !!warn);
+}
+function nvRender() {
+  const slot = nvSlot;
+  const d = nvDecode(slot);
+  const m = machines[slot];
+  const v = Object.fromEntries(d.fields.map((f) => [f.name, f]));
+  $("nv-title").textContent = `NVRAM · ${slot === FS ? KINDS[m.kind].title : `${KINDS[m.kind].title} ${slot}`}`;
+  const own = net.has_own_nvram(slot);
+  let note = own ? "This machine has its own NVRAM, kept in this browser." : "Built-in settings for this slot. Changing anything gives the machine its own NVRAM.";
+  if (net.is_on(slot)) note += " It is on: the ROM reads the NVRAM at the next power-on.";
+  const ram = v.ram.value;
+  const warn = own && ram !== String(ramKb);
+  if (warn) note += ` The Memory setting at the top fits ${ramKb === 1024 ? "1 MB" : "512 KB"}, but this NVRAM has the ROM test ${ram === "1024" ? "1 MB" : ram + " KB"}: expect a memory error at power-on.`;
+  nvNote(note, warn);
+  const body = $("nv-fields");
+  body.replaceChildren();
+  for (const [name, spec] of Object.entries(NV_FIELDS)) {
+    const f = v[name];
+    if (!f) continue;
+    const tr = document.createElement("tr");
+    const [th, td, tm] = [0, 1, 2].map(() => document.createElement("td"));
+    th.textContent = spec.label;
+    tm.className = "m";
+    tm.textContent = f.meaning;
+    if (spec.kind === "loaders") {
+      const on = new Set(f.value.split(","));
+      for (const [key, label] of LOADER_NAMES) {
+        const l = document.createElement("label");
+        const c = document.createElement("input");
+        c.type = "checkbox";
+        c.checked = on.has(key);
+        c.addEventListener("change", () => {
+          const picked = LOADER_NAMES.map(([k]) => k).filter((k) => k === key ? c.checked : on.has(k));
+          nvChange("loaders", picked.join(",") || "none");
+        });
+        l.append(c, " ", label);
+        td.append(l);
+      }
+    } else if (spec.kind === "check") {
+      const c = document.createElement("input");
+      c.type = "checkbox";
+      c.checked = f.value === "yes";
+      c.addEventListener("change", () => nvChange(name, c.checked ? "yes" : "no"));
+      td.append(c);
+    } else if (spec.kind === "select") {
+      const s = document.createElement("select");
+      const opts = spec.options.some(([k]) => k === f.value) ? spec.options : [[f.value, `unknown (${f.value})`], ...spec.options];
+      for (const [k, label] of opts) s.add(new Option(label, k, false, k === f.value));
+      s.addEventListener("change", () => nvChange(name, s.value));
+      td.append(s);
+    } else {
+      const i = document.createElement("input");
+      i.type = spec.kind === "number" ? "number" : "text";
+      if (spec.max !== undefined) { i.min = 0; i.max = spec.max; }
+      i.className = "hex";
+      i.value = f.value;
+      i.size = Math.max(6, f.value.length + 2);
+      i.addEventListener("change", () => nvChange(name, i.value));
+      td.append(i);
+    }
+    tr.append(th, td, tm);
+    body.append(tr);
+  }
+  const words = $("nv-words");
+  words.replaceChildren();
+  d.words.forEach((w, i) => {
+    const l = document.createElement("label");
+    const inp = document.createElement("input");
+    inp.className = "hex";
+    inp.value = w.toString(16).toUpperCase().padStart(4, "0");
+    inp.maxLength = 4;
+    inp.addEventListener("change", () => nvChange(`w${i}`, inp.value));
+    l.append(`w${i}`, inp);
+    words.append(l);
+  });
+  const other = d.other.map(([i, mask, val]) => `w${i}&${mask.toString(16).toUpperCase().padStart(4, "0")}=${val.toString(16).toUpperCase().padStart(4, "0")}`);
+  $("nv-other").textContent = other.length ? `Bits with no known meaning yet: ${other.join(", ")}. Edit them in the words above.` : "";
+  $("nv-report").textContent = d.report;
+}
+$("nv-close").addEventListener("click", () => $("nv").close());
+$("nv").addEventListener("close", () => { nvSlot = null; });
+$("nv-default").addEventListener("click", () => {
+  net.set_nvram(nvSlot, new Uint8Array());
+  nvSave(nvSlot);
+  nvRender();
+});
+$("nv-load").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    net.set_nvram(nvSlot, new Uint8Array(await file.arrayBuffer()));
+    nvSave(nvSlot);
+    nvRender();
+    $("nv-note").prepend(`Loaded ${file.name}. `);
+  } catch (err) {
+    nvNote(`${file.name}: ${err.message || err}`, true);
+  }
+});
+$("nv-download").addEventListener("click", () => {
+  const node = nvDecode(nvSlot).fields.find((f) => f.name === "node").value;
+  const url = URL.createObjectURL(new Blob([net.nvram(nvSlot)], { type: "application/octet-stream" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `icon-nvram-node${node}.bin`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
 function frame() {
   requestAnimationFrame(frame);
   if (!net) return;
@@ -1189,6 +1367,11 @@ function frame() {
     if (m.tap) { m.tap.classList.toggle("busy", busy); m.drop.classList.toggle("busy", busy); }
     else $("cable").classList.toggle("busy", busy);
     if (!on) return;
+    // The ICON wrote its NVRAM (configure, node_info, set_boot_type): keep it.
+    if (net.take_nvram_dirty(slot)) {
+      nvSave(slot);
+      if (nvSlot === slot) nvRender();
+    }
     m.image.data.set(net.screen(slot));
     m.ctx.putImageData(m.image, 0, 0);
     const l = net.lights(slot);
@@ -1247,6 +1430,13 @@ if (!roms.shared) {
   } catch {}
 }
 net.set_ram_kb(ramKb);
+machines.forEach((m, slot) => {
+  const saved = local.get(NV_KEY(slot));
+  if (saved && saved.length === 64) {
+    try { net.set_nvram(slot, fromHex(saved)); } catch {}
+  }
+  nvMark(slot);
+});
 applyRoms();
 showRoms(note);
 try {

@@ -178,6 +178,34 @@
   a { color: var(--amber); }
   .help { color: var(--muted); font-size: 13px; margin-top: 18px; max-width: 1100px; }
   code { background: #0004; padding: 1px 5px; border-radius: 4px; }
+  button.nv-open { background: #f3eee2; color: #2b2a26; border: 1px solid #9d957f; border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; margin-left: auto; }
+  button.nv-open.own { border-color: #b97516; box-shadow: inset 0 -2px 0 var(--amber); }
+  dialog.nv { width: min(880px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--beige-edge); border-radius: 12px;
+              background: #f6f2e8; color: #2b2a26; padding: 0 0 12px; font-size: 13px; }
+  dialog.nv::backdrop { background: #000a; }
+  .nv-head { position: sticky; top: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px;
+             background: linear-gradient(#e2dbca, var(--beige)); border-bottom: 1px solid var(--beige-edge); }
+  .nv-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .nv button, .nv .nv-btn, .nv select, .nv input { background: #fff; color: #2b2a26; border: 1px solid #9d957f; border-radius: 5px; padding: 4px 9px; font: inherit; }
+  .nv button, .nv .nv-btn { cursor: pointer; }
+  .nv input.hex, .nv input[type=number] { font: 13px ui-monospace, Menlo, Consolas, monospace; }
+  .nv input.bad { border-color: #b4441c; background: #fff1ec; }
+  .nv-note { margin: 10px 14px; }
+  .nv-note.warn { color: #b4441c; font-weight: 600; }
+  .nv table { width: calc(100% - 28px); margin: 0 14px; border-collapse: collapse; }
+  .nv td { padding: 4px 8px 4px 0; border-bottom: 1px solid #e3dccb; vertical-align: middle; }
+  .nv td:first-child { font-weight: 600; white-space: nowrap; width: 1%; }
+  .nv td.m { color: #6c675c; }
+  .nv td label { margin-right: 10px; white-space: nowrap; }
+  .nv h3 { font-size: 13px; margin: 14px 14px 6px; }
+  .nv-words { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; margin: 0 14px; }
+  .nv-words label { display: flex; flex-direction: column; font-size: 11px; color: #6c675c; }
+  .nv-words input { width: 100%; text-align: center; }
+  .nv details { margin: 10px 14px 0; }
+  .nv pre { background: #fff; border: 1px solid #e3dccb; border-radius: 5px; padding: 8px; overflow-x: auto; font-size: 12px; }
+  .nv td select, .nv td input.hex { max-width: 100%; }
+  @media (max-width: 640px) { .nv-words { grid-template-columns: repeat(4, minmax(0, 1fr)); } .nv td.m { display: none; }
+                              .nv td:nth-child(2) { max-width: calc(100vw - 170px); } }
 </style>
 </head>
 <body>
@@ -234,6 +262,7 @@
           <span class="lamp"><span class="led green" id="fd0"></span>floppy</span>
           <span class="lamp"><span class="led yellow" id="trouble0"></span>trouble</span>
         </div>
+        <button class="nv-open" id="nv0" title="The settings chip: boot order, node number, memory, monitor…">NVRAM</button>
         <button class="power" id="power0">Power</button>
       </div>
       <div class="controls">
@@ -277,6 +306,7 @@
           <span class="lamp"><span class="led amber pwr"></span>power</span>
           <span class="lamp"><span class="led yellow trouble"></span>trouble</span>
         </div>
+        <button class="nv-open" title="The settings chip: boot order, node number, memory, monitor…">NVRAM</button>
         <button class="power">Power</button>
       </div>
     </section>
@@ -354,6 +384,25 @@
     <b>every machine is off</b>. Text is shown and saved with the ICON's accents and line ends; ⟦ and ⟧ are its underline
     codes. Names are made to fit QNX (up to 16 letters, digits, <code>_ . $</code>).</p>
   </details>
+  <!-- NVRAM editor for one machine; filled in by app.js -->
+  <dialog class="nv" id="nv">
+    <div class="nv-head">
+      <b id="nv-title">NVRAM</b>
+      <span class="nv-btns">
+        <label class="nv-btn" title="Use an image read from a real ICON's NMC9306 chip (32 bytes, each word low byte first)"><input id="nv-load" type="file" accept=".bin" hidden>Load .bin…</label>
+        <button id="nv-download" title="Save these settings as a 32-byte image, for icon-cli or a chip programmer">Download .bin</button>
+        <button id="nv-default" title="Forget this machine's own NVRAM and use the built-in settings for its slot">Use built-in</button>
+        <button id="nv-close">Close</button>
+      </span>
+    </div>
+    <p id="nv-note" class="nv-note"></p>
+    <table><tbody id="nv-fields"></tbody></table>
+    <h3>Words <span class="muted">(hex, w0 first; the ROM reads them at power-on)</span></h3>
+    <div class="nv-words" id="nv-words"></div>
+    <p id="nv-other" class="nv-note muted"></p>
+    <details><summary>As text</summary><pre id="nv-report"></pre></details>
+  </dialog>
+
   <details class="typer">
     <summary>Type text into the selected machine</summary>
     Paste lines below; each is typed into the machine you last clicked, followed by Enter, one line at a time.

@@ -8,6 +8,7 @@ use icon_core::devices::nvram::presets;
 use icon_core::devices::wd1002::Disk;
 use icon_core::lan::Lan;
 use icon_core::machine::{Config, Machine, CPU_HZ, STRAPS_NORMAL};
+use icon_core::nvconfig;
 use wasm_bindgen::prelude::*;
 
 pub const FILESERVER: usize = 0;
@@ -57,6 +58,42 @@ fn json_str(s: &str) -> String {
     }
     out.push('"');
     out
+}
+
+/// An NVRAM image (32 bytes) decoded, as JSON: `fields` (name, value,
+/// meaning, in the order nv_config reports them), `other` (`[word, mask,
+/// value]` for bits no field covers), `words` (16 numbers) and `report` (text).
+#[wasm_bindgen]
+pub fn nvram_decode(image: &[u8]) -> Result<String, JsError> {
+    let w = nvconfig::from_bin(image).map_err(|e| JsError::new(&e))?;
+    let fields: Vec<String> = nvconfig::fields(&w)
+        .iter()
+        .map(|f| format!("{{\"name\":{},\"value\":{},\"meaning\":{}}}", json_str(f.name), json_str(&f.value), json_str(&f.meaning)))
+        .collect();
+    let other: Vec<String> = nvconfig::other_bits(&w).iter().map(|(i, m, v)| format!("[{i},{m},{v}]")).collect();
+    let words: Vec<String> = w.iter().map(|x| x.to_string()).collect();
+    Ok(format!(
+        "{{\"fields\":[{}],\"other\":[{}],\"words\":[{}],\"report\":{}}}",
+        fields.join(","),
+        other.join(","),
+        words.join(","),
+        json_str(&nvconfig::report(&w))
+    ))
+}
+
+/// Change one NVRAM setting (`nvconfig::set`: a field name, `wN` or `wN.B`)
+/// in a 32-byte image; returns the new image.
+#[wasm_bindgen]
+pub fn nvram_set(image: &[u8], name: &str, value: &str) -> Result<Vec<u8>, JsError> {
+    let mut w = nvconfig::from_bin(image).map_err(|e| JsError::new(&e))?;
+    nvconfig::set(&mut w, name, value).map_err(|e| JsError::new(&format!("{name}: {e}")))?;
+    Ok(nvconfig::to_bin(&w))
+}
+
+/// A built-in NVRAM image (`fileserver` or `workstation`), 32 bytes.
+#[wasm_bindgen]
+pub fn nvram_preset(name: &str) -> Result<Vec<u8>, JsError> {
+    nvconfig::preset(name).map(|w| nvconfig::to_bin(&w)).ok_or_else(|| JsError::new("unknown preset"))
 }
 
 /// The QNX volumes in a disk image, as JSON `[{"label", "offset"}]`.
@@ -317,6 +354,8 @@ pub struct Network {
     roms: std::collections::HashMap<String, Vec<u8>>,
     /// Memory fitted to every machine: 512, or 1024 for the 1 MB upgrade card.
     ram_kb: u32,
+    /// Each slot's own NVRAM, if it has one (see `Rig::nvram`).
+    nvram: Vec<Option<[u16; 16]>>,
 }
 
 impl Default for Network {
@@ -330,7 +369,7 @@ impl Network {
     /// A segment with the fileserver and one ICON workstation, and no ROMs yet.
     #[wasm_bindgen(constructor)]
     pub fn new() -> Network {
-        Network { lan: Lan::new(2), kinds: vec![LEXICON.into(), ICON.into()], roms: Default::default(), ram_kb: 512 }
+        Network { lan: Lan::new(2), kinds: vec![LEXICON.into(), ICON.into()], roms: Default::default(), ram_kb: 512, nvram: vec![None; 2] }
     }
 
     /// Set the boot ROM for one machine kind ("lexicon", "icon"). Machines
@@ -369,6 +408,7 @@ impl Network {
         self.lan.nodes.push(None);
         self.lan.grow();
         self.kinds.push(kind.to_string());
+        self.nvram.push(None);
         Ok(self.lan.nodes.len() - 1)
     }
 
@@ -380,6 +420,7 @@ impl Network {
         self.lan.nodes.pop();
         self.lan.grow();
         self.kinds.pop();
+        self.nvram.pop();
         true
     }
 
@@ -395,14 +436,7 @@ impl Network {
         let Some(kind) = self.kinds.get(slot) else { return Err(JsError::new("no such node")) };
         let rom = self.roms.get(kind).ok_or_else(|| JsError::new(&format!("no {kind} ROM loaded")))?.clone();
         let fs = slot == FILESERVER;
-        let mut nvram = if fs {
-            presets::fileserver()
-        } else {
-            let mut nv = presets::workstation();
-            nv[10] = (((15 + slot) as u16) << 8) | 1; // own node ID, boot server 1
-            nv
-        };
-        presets::set_ram_kb(&mut nvram, self.ram_kb);
+        let nvram = self.boot_nvram(slot);
         let m = Machine::new(Config {
             rom,
             patch_800k_floppy: false,
@@ -417,7 +451,45 @@ impl Network {
     }
 
     pub fn power_off(&mut self, slot: usize) {
-        self.lan.power_off(slot);
+        if let (Some(m), Some(Some(nv))) = (self.lan.power_off(slot), self.nvram.get_mut(slot)) {
+            *nv = m.board.nvram.words;
+        }
+    }
+
+    /// The slot's NVRAM now, as a 32-byte image (words low byte first): the
+    /// running machine's chip, else what it will power on with.
+    pub fn nvram(&self, slot: usize) -> Vec<u8> {
+        let w = self.m(slot).map(|m| m.board.nvram.words).unwrap_or_else(|| self.boot_nvram(slot));
+        nvconfig::to_bin(&w)
+    }
+
+    /// The built-in image the slot gets when it has no NVRAM of its own.
+    pub fn default_nvram(&self, slot: usize) -> Vec<u8> {
+        nvconfig::to_bin(&presets::for_slot(slot, self.ram_kb))
+    }
+
+    /// True if the slot has its own NVRAM rather than the built-in image.
+    pub fn has_own_nvram(&self, slot: usize) -> bool {
+        self.nvram.get(slot).is_some_and(|n| n.is_some())
+    }
+
+    /// Give the slot its own NVRAM (32-byte image), or an empty array to go
+    /// back to the built-in image. A running machine's chip changes at once;
+    /// the ROM reads it at the next power-on.
+    pub fn set_nvram(&mut self, slot: usize, image: &[u8]) -> Result<(), JsError> {
+        let words = if image.is_empty() { None } else { Some(nvconfig::from_bin(image).map_err(|e| JsError::new(&e))?) };
+        let n = self.nvram.get_mut(slot).ok_or_else(|| JsError::new("no such node"))?;
+        *n = words;
+        let w = self.boot_nvram(slot);
+        if let Some(m) = self.m_mut(slot) {
+            m.board.nvram.words = w;
+        }
+        Ok(())
+    }
+
+    /// True if the ICON wrote its NVRAM since the last call (then clears the flag).
+    pub fn take_nvram_dirty(&mut self, slot: usize) -> bool {
+        self.m_mut(slot).is_some_and(|m| std::mem::take(&mut m.board.nvram.dirty))
     }
 
     pub fn is_on(&self, slot: usize) -> bool {
@@ -429,6 +501,9 @@ impl Network {
         self.lan.run((CPU_HZ / 60) as u64);
     }
 
+    fn boot_nvram(&self, slot: usize) -> [u16; 16] {
+        self.nvram.get(slot).copied().flatten().unwrap_or_else(|| presets::for_slot(slot, self.ram_kb))
+    }
     fn m(&self, slot: usize) -> Option<&Machine> {
         self.lan.nodes.get(slot)?.as_ref()
     }

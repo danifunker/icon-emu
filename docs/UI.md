@@ -25,6 +25,17 @@ To give the fileserver and the workstations different ROMs, untick **Use the sam
 - **512 KB** is the standard ICON.
 - **1 MB** adds the CEMCORP "1 MEG ICON UPGRADE BOARD". It only works with the **Rel 2.11** ROM. With the original ROM a 1 MB workstation stops before `Login:`. The note next to the menu warns you when the loaded ROM doesn't fit.
 
+## NVRAM
+
+Every ICON keeps its settings in a small chip, the NVRAM: which devices to boot from, its network node number, the fileserver it boots from, memory size, monitor, serial numbers and screen timing. The **NVRAM** button next to each machine's **Power** button opens them.
+
+- Until you change anything, a machine uses built-in settings for its place on the network: the fileserver is node 1 and boots from its diskette, then its hard disk; workstations are nodes 16, 17 and so on and boot from the fileserver.
+- Changing a setting gives that machine its **own NVRAM**. Its button is then underlined in amber. Its own NVRAM is kept in this browser, along with anything the ICON itself writes to the chip (`attach_net`, `set_boot_type`), the way the real chip keeps it. **Use built-in** goes back to the built-in settings.
+- The boot ROM reads the NVRAM when the machine is switched on, so changes to a running machine take effect at its next power-on. Programs such as `nv_config` read the chip directly and see a change straight away.
+- **Load .bin…** takes an image read from a real ICON's NMC9306 chip with an EPROM programmer: 32 bytes, each word low byte first. **Download .bin** saves one in the same format, for `icon-cli nvram` or for programming a chip.
+- The **Words** row shows all 16 words in hex for anything the named settings don't cover. Bits with no known meaning are listed under it.
+- With its own NVRAM, a machine's memory comes from the NVRAM, not from the **Memory** menu. The panel warns you when the two disagree; the ROM then stops at a memory error, as a real ICON would.
+
 ## Switching machines on and off
 
 - **Power** switches a machine on or off. Switch the fileserver on first and wait for `Login:`, then the workstations.

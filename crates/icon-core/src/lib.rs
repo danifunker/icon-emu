@@ -7,4 +7,5 @@ pub mod text;
 mod text_tables;
 pub mod machine;
 pub mod lan;
+pub mod nvconfig;
 pub mod session;

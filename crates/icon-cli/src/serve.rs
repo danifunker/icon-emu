@@ -8,6 +8,7 @@
 
 use icon_core::devices::wd1002::{Disk, HD_10MB, HD_64MB};
 use icon_core::files::{self, qnx2fs};
+use icon_core::nvconfig;
 use icon_core::session::{Rig, FILESERVER};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
@@ -27,6 +28,7 @@ pub fn main(argv: Vec<String>) {
     let mut socket = std::env::var("ICON_CI_SOCKET").unwrap_or_else(|_| DEFAULT_SOCKET.into());
     let mut rom = format!("{}/repos/icon_icon2_research/firmware/ICON1/icon1_rom_combined.bin", std::env::var("HOME").unwrap_or_default());
     let (mut hd, mut floppy, mut workstations, mut ram_kb) = (None, None, 1usize, 512u32);
+    let mut nvram: Vec<(usize, String)> = Vec::new();
     // --rom is used by every machine unless --fs-rom / --ws-rom override it.
     let (mut fs_rom, mut ws_rom): (Option<String>, Option<String>) = (None, None);
     let mut it = argv.into_iter();
@@ -41,8 +43,13 @@ pub fn main(argv: Vec<String>) {
             "--floppy" => floppy = Some(std::fs::read(v()).expect("read floppy image")),
             "--workstations" => workstations = v().parse().expect("number"),
             "--ram-kb" => ram_kb = v().parse().expect("number"),
+            "--nvram" => {
+                let s = v();
+                let (slot, path) = s.split_once('=').expect("--nvram SLOT=FILE");
+                nvram.push((slot.parse().expect("--nvram SLOT=FILE: slot number"), path.to_string()));
+            }
             "-h" | "--help" => {
-                println!("icon-cli serve [--socket {DEFAULT_SOCKET}] [--rom F] [--fs-rom F] [--ws-rom F] [--hd IMG] [--floppy IMG] [--workstations N] [--ram-kb 512|1024]");
+                println!("icon-cli serve [--socket {DEFAULT_SOCKET}] [--rom F] [--fs-rom F] [--ws-rom F] [--hd IMG] [--floppy IMG] [--workstations N] [--ram-kb 512|1024] [--nvram SLOT=FILE ...]");
                 return;
             }
             _ => panic!("unknown serve argument {k}"),
@@ -59,6 +66,10 @@ pub fn main(argv: Vec<String>) {
     }
     rig.ram_kb = ram_kb;
     rig.clock = crate::local_now;
+    for (slot, path) in nvram {
+        let w = std::fs::read(&path).map_err(|e| e.to_string()).and_then(|b| nvconfig::from_bin(&b)).unwrap_or_else(|e| panic!("--nvram {path}: {e}"));
+        rig.set_nvram(slot, Some(w)).unwrap_or_else(|e| panic!("--nvram {slot}={path}: {e}"));
+    }
     let mut server = Server { rig, hd, floppy, quit: false };
     let _ = std::fs::remove_file(&socket);
     let listener = UnixListener::bind(&socket).unwrap_or_else(|e| panic!("bind {socket}: {e}"));
@@ -221,6 +232,42 @@ impl Server {
                     self.rig.wait_login(n).map_err(e)?;
                 }
                 Ok(json!({"slot": n, "seconds": self.rig.seconds()}))
+            }
+            "nvram" => {
+                let n = slot();
+                if n >= self.rig.slots() {
+                    return Err(format!("no slot {n}"));
+                }
+                match a["action"].as_str().unwrap_or("show") {
+                    "show" => {}
+                    "set" => {
+                        let mut w = self.rig.nvram_words(n);
+                        let sets: Vec<&str> = a["set"].as_array().map(|v| v.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+                        if sets.is_empty() {
+                            return Err("set needs NAME=VALUE".into());
+                        }
+                        nvconfig::apply(&mut w, sets)?;
+                        self.rig.set_nvram(n, Some(w)).map_err(e)?;
+                    }
+                    "load" => {
+                        let w = nvconfig::from_bin(&read("path")?)?;
+                        self.rig.set_nvram(n, Some(w)).map_err(e)?;
+                    }
+                    "save" => {
+                        let p = s("path")?;
+                        std::fs::write(&p, nvconfig::to_bin(&self.rig.nvram_words(n))).map_err(|x| format!("{p}: {x}"))?;
+                    }
+                    "reset" => self.rig.set_nvram(n, None).map_err(e)?,
+                    x => return Err(format!("unknown nvram action {x:?} (show, set, load, save, reset)")),
+                }
+                let w = self.rig.nvram_words(n);
+                Ok(json!({
+                    "slot": n,
+                    "own": self.rig.nvram[n].is_some(),
+                    "words": nvconfig::to_hex(&w),
+                    "report": nvconfig::report(&w),
+                    "note": if self.rig.machine(n).is_ok() && a["action"].as_str().is_some_and(|x| x != "show" && x != "save") { "the machine is on: the ROM reads the NVRAM at the next power-on" } else { "" },
+                }))
             }
             "add-workstation" => Ok(json!({"slot": self.rig.add_workstation(), "node": 15 + self.rig.slots() - 1})),
             "login" => {

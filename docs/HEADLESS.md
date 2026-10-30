@@ -15,7 +15,7 @@ The boot ROM is not included. Give it with `--rom FILE`: the 32 KB image, which 
 ## Start the server
 
 ```
-icon-cli serve [--socket /tmp/icon.sock] [--rom FILE] [--fs-rom FILE] [--ws-rom FILE] [--hd IMG] [--floppy IMG] [--workstations N] [--ram-kb 512|1024]
+icon-cli serve [--socket /tmp/icon.sock] [--rom FILE] [--fs-rom FILE] [--ws-rom FILE] [--hd IMG] [--floppy IMG] [--workstations N] [--ram-kb 512|1024] [--nvram SLOT=FILE ...]
 ```
 
 - The socket can also be set with `ICON_CI_SOCKET`. Keep the path short, because Unix socket paths are limited to about 100 bytes.
@@ -49,6 +49,9 @@ icon-ci script FILE [--keep-going]     # one command per line, '#' comments
 | `screen SLOT`, `transcript SLOT` | Decoded console: the current screen, or everything since power-on (scrolling merged) |
 | `screenshot SLOT FILE.ppm` | Screen image (640×240 PPM) |
 | `hd-save IMG`, `floppy-save IMG` | Write the fileserver's disks, including everything QNX wrote |
+| `nvram SLOT` | The machine's NVRAM settings, as the ICON's `nv_config` reports them, and its 16 words |
+| `nvram SLOT set NAME=VALUE…` | Change settings, e.g. `nvram 1 set node=20 loaders=network`. The ROM reads them at the next power-on |
+| `nvram SLOT load FILE`, `save FILE`, `reset` | Use a 32-byte image, save one, or go back to the built-in settings |
 | `quit` | Stop the server |
 
 ### Files on the fileserver's disks
@@ -103,6 +106,23 @@ login
 run 'sort 1:/user/icon/input.txt >1:/user/icon/sorted.txt'
 get hd /user/icon/sorted.txt sorted.txt --text
 ```
+
+### NVRAM
+
+Each slot starts with built-in NVRAM settings (fileserver node 1; workstations node 15 + slot, booting from node 1). `--nvram SLOT=FILE` or `icon-ci nvram SLOT load|set` gives a slot its own NVRAM. It is used exactly as it is at power-on, so its node number, boot order and memory size apply. It keeps whatever the ICON writes to it across power cycles, for as long as the server runs. Save it with `nvram SLOT save FILE`.
+
+An image file is 32 bytes: 16 words, each **low byte first**, as an EPROM programmer saves the ICON's NMC9306 chip. `icon-cli nvram` reads and edits one with no machine running:
+
+```
+icon-cli nvram FILE                       # show the settings
+icon-cli nvram FILE set node=1 server=1 loaders=floppy,hd
+icon-cli nvram FILE new fileserver|workstation [NAME=VALUE ...] [--force]
+icon-cli nvram FILE hex [W0 ... W15]      # print or replace the raw words
+icon-cli nvram FILE diff OTHER            # what differs from another image
+icon-cli nvram --fields                   # every NAME and its values
+```
+
+The names are `loaders` (any of `floppy,network,hd,rom`, tried in that order), `board` (`fileserver` or `workstation`), `ram`, `local-floppy`, `serial-ports`, `rtc`, `keyboard`, `speech`, `node`, `server`, `boot-file`, `monitor`, `hw-serial`, `sw-serial`, `palette` and `crtc`. `wN=HEX` sets a raw word and `wN.B=0|1` sets one bit. [NVRAM, clock and disk](nvram_rtc_disk_install.md) §1 has the full map.
 
 ## Protocol
 

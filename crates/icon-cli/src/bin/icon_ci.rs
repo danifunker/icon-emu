@@ -20,6 +20,14 @@
 //!   speech-wav SLOT FILE.wav   (the speech chip's recent output, 8 kHz)
 //!   hd-save FILE | floppy-save FILE
 //!
+//! NVRAM (16 words per machine; FILE is a 32-byte image, low byte first, as
+//! `icon-cli nvram` and the web page read and write). A slot given its own
+//! NVRAM keeps it, and what the ICON writes to it, across power cycles;
+//! reset goes back to the built-in image. `icon-cli nvram --fields` lists NAMEs.
+//!   nvram SLOT [show]              the settings, as the ICON's nv_config reports them
+//!   nvram SLOT set NAME=VALUE ...  change settings (the ROM reads them at power-on)
+//!   nvram SLOT load FILE | save FILE | reset
+//!
 //! Files on the fileserver's disks. DISK is fd (the diskette), hd (the hard
 //! disk's first partition) or hd2 / hd3 (its other partitions). Reading works
 //! on a running machine; the diskette can be written any time, the hard disk
@@ -164,6 +172,17 @@ fn exec(sock: &mut UnixStream, reader: &mut BufReader<UnixStream>, words: &[Stri
                 _ => ("file-rm".into(), with(json!({"path": p(2)?}))),
             }
         }
+        "nvram" => {
+            let host = |x: String| std::path::absolute(&x).map(|p| p.display().to_string()).unwrap_or(x);
+            let action = if w(2).is_empty() { "show".to_string() } else { w(2) };
+            let mut v = json!({"slot": num(1, 0), "action": action});
+            match action.as_str() {
+                "set" => v["set"] = json!(words[3..]),
+                "load" | "save" => v["path"] = json!(host(w(3))),
+                _ => {}
+            }
+            ("nvram".into(), v)
+        }
         "speech-wav" => ("speech-wav".into(), json!({"slot": num(1, 1), "path": w(2)})),
         other => return Err(format!("unknown command {other:?} (icon-ci --help)")),
     };
@@ -171,6 +190,11 @@ fn exec(sock: &mut UnixStream, reader: &mut BufReader<UnixStream>, words: &[Stri
     Ok(match cmd.as_str() {
         "run" => data["output"].as_str().unwrap_or("").to_string(),
         "screen" | "transcript" => data["text"].as_str().unwrap_or("").to_string(),
+        "nvram" => {
+            let own = if data["own"].as_bool() == Some(true) { "its own NVRAM" } else { "the built-in NVRAM" };
+            let note = data["note"].as_str().filter(|x| !x.is_empty()).map(|x| format!("\n({x})")).unwrap_or_default();
+            format!("slot {} · {own}\n{}{note}", data["slot"], data["report"].as_str().unwrap_or("").trim_end())
+        }
         "files" => {
             let mut out: Vec<String> = data["entries"]
                 .as_array()

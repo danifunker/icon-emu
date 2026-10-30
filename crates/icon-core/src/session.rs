@@ -79,6 +79,10 @@ pub struct Rig {
     /// The default is UTC, since the core has no time-zone data; `icon-cli`
     /// sets local time, and the web page passes the browser's.
     pub clock: fn() -> i64,
+    /// Each slot's own NVRAM, if it has one: used as it is at power-on
+    /// (instead of the built-in image for the slot and `ram_kb`), and kept
+    /// at power-off with whatever the ICON wrote to it, as the real EEPROM.
+    pub nvram: Vec<Option<[u16; 16]>>,
 }
 
 /// UTC seconds: the default `Rig::clock` (the core has no time-zone data).
@@ -102,6 +106,7 @@ impl Rig {
             clock: utc_now,
             boot_timeout: 180.0,
             command_timeout: 300.0,
+            nvram: vec![None; slots],
         })
     }
 
@@ -114,6 +119,7 @@ impl Rig {
         self.lan.nodes.push(None);
         self.lan.grow();
         self.consoles.push(Console::default());
+        self.nvram.push(None);
         self.lan.nodes.len() - 1
     }
 
@@ -121,8 +127,7 @@ impl Rig {
     /// boots from the hard disk (the floppy is then QNX drive 2); with one it
     /// boots from the floppy (drive 1; hard-disk partitions are drives 2, 3).
     pub fn power_on_fileserver(&mut self, hard_disk: Option<Vec<u8>>, floppy: Option<Vec<u8>>) -> Result<(), SessionError> {
-        let mut nvram = presets::fileserver();
-        presets::set_ram_kb(&mut nvram, self.ram_kb);
+        let nvram = self.boot_nvram(FILESERVER);
         let mut m = Machine::new(Config {
             rom: self.rom.clone(),
             patch_800k_floppy: false,
@@ -149,9 +154,7 @@ impl Rig {
         if slot == FILESERVER || slot >= self.slots() {
             return Err(SessionError::NoSuchNode(slot));
         }
-        let mut nv = presets::workstation();
-        nv[10] = (((15 + slot) as u16) << 8) | 1; // own node ID, boot server 1
-        presets::set_ram_kb(&mut nv, self.ram_kb);
+        let nv = self.boot_nvram(slot);
         let m = Machine::new(Config {
             rom: self.workstation_rom.clone().unwrap_or_else(|| self.rom.clone()),
             patch_800k_floppy: false,
@@ -170,7 +173,37 @@ impl Rig {
         if let Some(c) = self.consoles.get_mut(slot) {
             *c = Console::default();
         }
-        self.lan.power_off(slot)
+        let m = self.lan.power_off(slot);
+        if let (Some(m), Some(Some(nv))) = (&m, self.nvram.get_mut(slot)) {
+            *nv = m.board.nvram.words;
+        }
+        m
+    }
+
+    /// The NVRAM `slot` powers on with: its own, else the built-in image.
+    pub fn boot_nvram(&self, slot: usize) -> [u16; 16] {
+        self.nvram.get(slot).copied().flatten().unwrap_or_else(|| presets::for_slot(slot, self.ram_kb))
+    }
+
+    /// What `slot`'s NVRAM holds now: the running machine's chip, else what
+    /// it will power on with.
+    pub fn nvram_words(&self, slot: usize) -> [u16; 16] {
+        self.machine(slot).map(|m| m.board.nvram.words).unwrap_or_else(|_| self.boot_nvram(slot))
+    }
+
+    /// Give `slot` its own NVRAM (`None`: back to the built-in image). A
+    /// running machine's chip is reprogrammed in place; the ROM reads it at
+    /// the next power-on.
+    pub fn set_nvram(&mut self, slot: usize, words: Option<[u16; 16]>) -> Result<(), SessionError> {
+        if slot >= self.slots() {
+            return Err(SessionError::NoSuchNode(slot));
+        }
+        self.nvram[slot] = words;
+        let nv = self.boot_nvram(slot);
+        if let Ok(m) = self.machine_mut(slot) {
+            m.board.nvram.words = nv;
+        }
+        Ok(())
     }
 
     pub fn machine(&self, slot: usize) -> Result<&Machine, SessionError> {

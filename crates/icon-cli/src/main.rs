@@ -3,6 +3,7 @@
 //! a guessed frame buffer.
 
 mod disk;
+mod nvram;
 mod serve;
 
 use icon_core::devices::nvram::presets;
@@ -14,6 +15,8 @@ use std::io::Write;
 struct Args {
     rom: String,
     preset: String,
+    /// An NVRAM image to use as it is, instead of the preset.
+    nvram: Option<String>,
     seconds: f64,
     ram_kb: u32,
     /// Script runs: the workstation's memory and boot ROM.
@@ -51,6 +54,7 @@ fn parse_args() -> Args {
             std::env::var("HOME").unwrap_or_default()
         ),
         preset: "ws".into(),
+        nvram: None,
         seconds: 5.0,
         ram_kb: 512,
         ws_ram_kb: 512,
@@ -77,6 +81,7 @@ fn parse_args() -> Args {
         match k.as_str() {
             "--rom" => a.rom = v(),
             "--preset" => a.preset = v(),
+            "--nvram" => a.nvram = Some(v()),
             "--seconds" => a.seconds = v().parse().unwrap(),
             "--ram-kb" => a.ram_kb = parse_num(&v()),
             "--ws-ram-kb" => a.ws_ram_kb = parse_num(&v()),
@@ -107,7 +112,7 @@ fn parse_args() -> Args {
             "--trace-count" => a.trace_count = parse_num(&v()) as usize,
             "--hd" => a.hd = Some(v()),
             "-h" | "--help" => {
-                println!("icon-cli [--rom F] [--preset ws|fs] [--seconds S] [--ram-kb N] [--straps 0x1F]\n         [--ws-ram-kb N] [--ws-rom F] (script workstation)\n         [--trace-last N] [--dump-ram F] [--screen F.ppm] [--floppy F.img] [--hd F.img]");
+                println!("icon-cli [--rom F] [--preset ws|fs] [--nvram F.bin] [--seconds S] [--ram-kb N] [--straps 0x1F]\n         [--ws-ram-kb N] [--ws-rom F] (script workstation)\n         [--trace-last N] [--dump-ram F] [--screen F.ppm] [--floppy F.img] [--hd F.img]");
                 std::process::exit(0);
             }
             _ => panic!("unknown argument {k}"),
@@ -254,6 +259,9 @@ fn main() {
     if argv.first().map(String::as_str) == Some("disk") {
         return disk::main(argv[1..].to_vec());
     }
+    if argv.first().map(String::as_str) == Some("nvram") {
+        return nvram::main(argv[1..].to_vec());
+    }
     let mut args = parse_args();
     let rom = std::fs::read(&args.rom).expect("read ROM");
     let mut nvram = match args.preset.as_str() {
@@ -262,6 +270,9 @@ fn main() {
         p => panic!("unknown preset {p}"),
     };
     presets::set_ram_kb(&mut nvram, args.ram_kb);
+    if let Some(p) = &args.nvram {
+        nvram = icon_core::nvconfig::from_bin(&std::fs::read(p).expect("read NVRAM image")).unwrap_or_else(|e| panic!("{p}: {e}"));
+    }
     let fs = args.preset == "fs";
     let _ = fs;
     let mut m = Machine::new(Config { rom, patch_800k_floppy: false, ram_kb: args.ram_kb, nvram, straps: args.straps, host_time: local_now(), disk_controller: fs });
