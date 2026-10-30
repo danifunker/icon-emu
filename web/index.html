@@ -115,6 +115,8 @@
   .fm-title select { margin-left: auto; }
   .fm-title button, .fm-title .fm-btn { padding: 3px 9px; }
   .fm-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--fm-line); background: #fbfcfd; }
+  /* The toolbar style sets display: flex, which would override the hidden attribute. */
+  .fm [hidden] { display: none !important; }
   .fm-gap { flex: 1; }
   .fm-copybar { background: #eef4ff; }
   .fm-notice { background: #fff4d6; }
