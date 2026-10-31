@@ -67,7 +67,7 @@ From `print` (4.10.01) with `/config/print/PAT.fx80`:
 
 `print_screen` with the Epson setup sends `ESC A 8`, then per band `ESC * 4 E0 01` (480 columns at 80 dpi, top pin = MSB) and CR LF, and ends with `FF ESC @` (`/config/snap.init.fx80`). The Panasonic setup (`snap.init.p1091`) sends `ESC 1` and 640-column bands with no CR LF: each band fills the 8-inch line, and the printer feeds by itself.
 
-The two text setups differ only in the pitch codes: the Panasonic file sends `DC2` / `SI` alone where the Epson one sends `DC4 DC2` / `DC4 SI`.
+The two text setups also differ in how they define characters. The Panasonic one (`t=p1091`, what the page suggests) starts with `ESC #` and sends each character as `ESC y c` + 9 half-dot columns (top pin = MSB), which then prints at once, with no `ESC :` / `ESC %` / `ESC &`. It defines two more accent pieces than the Epson one, C6 (grave) and C7 (acute), and overstrikes with them: `C7` BS `e` = é. Its pitch codes are `DC2` / `SI` alone where the Epson one sends `DC4 DC2` / `DC4 SI`.
 
 ## The printer model (`crates/icon-printer`)
 

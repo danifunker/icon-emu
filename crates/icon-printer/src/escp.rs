@@ -10,6 +10,9 @@
 //! its own characters with `ESC &`, then text with DC2/DC4/SI pitch changes,
 //! `ESC E/F/G/H`, `ESC 0/2` line spacing and FF. Screen dumps (`print_screen`)
 //! use `ESC A 8` and `ESC * 4` bit images.
+//!
+//! With the Panasonic KX-P1091 setup (`PAT.p1091`) it defines its characters
+//! with `ESC y c` and 9 columns each instead, and prints them straight away.
 
 use crate::font::GLCD;
 
@@ -96,9 +99,9 @@ const INTL: [[char; 12]; 9] = [
 /// `/config/print/PAT.fx80`): lowered capitals that take an accent above,
 /// accents printed over a letter after a backspace, and a few symbols. Only
 /// used for the clean look's text; the dots always come from the download.
-const ICON_DOWNLOADS: [(u8, char); 13] = [
+const ICON_DOWNLOADS: [(u8, char); 15] = [
     (0xC1, 'A'), (0xC5, 'E'), (0xC9, 'I'), (0xCF, 'O'), (0xD5, 'U'),
-    (0x5E, '^'), (0xC0, '¸'), (0xDE, '¨'),
+    (0x5E, '^'), (0xC0, '¸'), (0xDE, '¨'), (0xC6, '`'), (0xC7, '´'),
     (0xBC, '«'), (0xBE, '»'), (0xAD, '÷'), (0xAA, '×'), (0xC2, 'ß'),
 ];
 
@@ -407,6 +410,17 @@ pub fn interpret(data: &[u8]) -> Document {
     p.finish()
 }
 
+/// Copy the ROM characters to RAM (ESC :).
+fn copy_rom(p: &mut Printer) {
+    for code in 0..256usize {
+        let c = code as u8;
+        if c & 0x7F >= 0x20 && c & 0x7F != 0x7F {
+            let (ch, glyph, italic) = rom_char(c, p.intl);
+            p.ram[code] = Some(RamChar { glyph, ch: Some(ch), italic });
+        }
+    }
+}
+
 /// Run the ESC sequence whose command byte is at `i`; returns the next index.
 fn escape(p: &mut Printer, data: &[u8], mut i: usize) -> usize {
     let at = |k: usize| data.get(k).copied().unwrap_or(0);
@@ -531,14 +545,7 @@ fn escape(p: &mut Printer, data: &[u8], mut i: usize) -> usize {
             i += 2;
         }
         b':' => {
-            // Copy the ROM characters to RAM.
-            for code in 0..256usize {
-                let c = code as u8;
-                if c & 0x7F >= 0x20 && c & 0x7F != 0x7F {
-                    let (ch, glyph, italic) = rom_char(c, p.intl);
-                    p.ram[code] = Some(RamChar { glyph, ch: Some(ch), italic });
-                }
-            }
+            copy_rom(p);
             i += 3;
         }
         b'%' => {
@@ -573,6 +580,27 @@ fn escape(p: &mut Printer, data: &[u8], mut i: usize) -> usize {
                     break;
                 }
             }
+        }
+        b'y' => {
+            // The KX-P1091 setup's download: ESC y c, then 9 half-dot columns
+            // (MSB the top pin). The character prints from then on.
+            if !p.ram.iter().any(Option::is_some) {
+                copy_rom(p);
+            }
+            let start = (i + 1).min(data.len());
+            let end = (start + 9).min(data.len());
+            let mut glyph = [0u16; 11];
+            for (g, &col) in glyph.iter_mut().zip(&data[start..end]) {
+                for pin in 0..8 {
+                    if col & (0x80 >> pin) != 0 {
+                        *g |= 1 << pin;
+                    }
+                }
+            }
+            let ch = ICON_DOWNLOADS.iter().find(|d| d.0 == n).map(|d| d.1);
+            p.ram[n as usize] = Some(RamChar { glyph, ch, italic: false });
+            p.use_ram = true;
+            i = end;
         }
         b'D' | b'B' => {
             let mut stops = Vec::new();
@@ -636,6 +664,19 @@ mod tests {
         assert_eq!(c[0].glyph[0], 1);
         assert_eq!(c[0].glyph[10], 1 << 7);
         assert_eq!(c[1].ch, Some('A'));
+    }
+
+    #[test]
+    fn panasonic_downloads() {
+        // ESC # then ESC y C1 + 9 columns, then C1 and A.
+        let mut job = vec![0x1B, b'#', 0x1B, b'y', 0xC1];
+        job.extend([0x80, 0, 0, 0, 0, 0, 0, 0, 0x01]);
+        job.extend([0xC1, b'A', b'\r']);
+        let c = &interpret(&job).pages[0].chars;
+        assert_eq!(c.len(), 2);
+        assert_eq!((c[0].ch, c[0].glyph[0], c[0].glyph[8]), (Some('A'), 1, 1 << 7));
+        assert_eq!(c[1].ch, Some('A'));
+        assert_eq!(c[1].x, 24.0);
     }
 
     #[test]
