@@ -279,7 +279,7 @@ impl Server {
             "printout" => {
                 let i = a["index"].as_u64().unwrap_or(0) as usize;
                 let p = self.rig.printouts.get(i).ok_or_else(|| format!("no printout {i}"))?;
-                let opt = icon_printer::Options::parse(a["style"].as_str().unwrap_or("authentic"), a["green_bar"].as_bool().unwrap_or(false), a["worn"].as_bool().unwrap_or(false))?;
+                let opt = icon_printer::Options::parse(a["style"].as_str().unwrap_or("authentic"), a["green_bar"].as_bool().unwrap_or(false), a["worn"].as_bool().unwrap_or(false), a["tractor"].as_bool().unwrap_or(false))?;
                 let doc = icon_printer::interpret(&p.data);
                 let path = s("path")?;
                 std::fs::write(&path, icon_printer::pdf(&doc, &opt)).map_err(|x| format!("{path}: {x}"))?;

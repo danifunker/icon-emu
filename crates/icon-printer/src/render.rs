@@ -3,8 +3,9 @@
 //! Two looks:
 //! - **Clean**: Letter paper, the text in Courier (selectable and searchable),
 //!   downloaded characters and bit images as crisp dots.
-//! - **Authentic**: 9.5-inch continuous tractor-feed paper (sprocket holes,
-//!   perforations, optionally green bar), every character printed as 9-pin
+//! - **Authentic**: continuous paper (optionally green bar) with its sprocket
+//!   strips torn off, an 8.5 x 11 inch sheet to print on Letter paper; or the
+//!   whole 9.5-inch tractor-feed sheet, holes and perforations; every character printed as 9-pin
 //!   dots with ribbon ink that varies along the ribbon, from pin to pin and
 //!   from dot to dot, and the small offset of bidirectional printing.
 //!
@@ -31,11 +32,14 @@ pub struct Options {
     pub green_bar: bool,
     /// Authentic only: a ribbon near the end of its life.
     pub worn_ribbon: bool,
+    /// Authentic only: keep the sprocket strips (a 9.5-inch sheet) rather
+    /// than tearing them off (8.5 x 11, which prints 1:1 on Letter).
+    pub tractor: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options { style: Style::Authentic, green_bar: false, worn_ribbon: false }
+        Options { style: Style::Authentic, green_bar: false, worn_ribbon: false, tractor: false }
     }
 }
 
@@ -51,7 +55,8 @@ fn sheet(opt: &Options) -> Sheet {
     match opt.style {
         // 8.5 x 11 inch sheets between 0.5 inch tractor strips; the head's
         // first column 0.25 inch in, the first line 0.25 inch down.
-        Style::Authentic => Sheet { w: 9.5, h: 11.0, left: 0.75, top: 0.25 },
+        Style::Authentic if opt.tractor => Sheet { w: 9.5, h: 11.0, left: 0.75, top: 0.25 },
+        Style::Authentic => Sheet { w: 8.5, h: 11.0, left: 0.25, top: 0.25 },
         Style::Clean => Sheet { w: 8.5, h: 11.0, left: 0.25, top: 0.25 },
     }
 }
@@ -220,6 +225,14 @@ fn paper_at(opt: &Options, x: f32, y: f32) -> [u8; 3] {
     if opt.style == Style::Clean {
         return [255, 255, 255];
     }
+    // x on the 8.5-inch sheet, whether or not the strips are on.
+    let strip = if opt.tractor { 0.5 } else { 0.0 };
+    if opt.green_bar && (0.12..=8.38).contains(&(x - strip)) && ((y / 0.5) as u32).is_multiple_of(2) {
+        return [214, 234, 212];
+    }
+    if !opt.tractor {
+        return [252, 251, 246];
+    }
     for hx in [0.25, 9.25] {
         let dy = (y - 0.25) - ((y - 0.25) / 0.5).round() * 0.5;
         let d = ((x - hx).powi(2) + dy.powi(2)).sqrt();
@@ -233,9 +246,6 @@ fn paper_at(opt: &Options, x: f32, y: f32) -> [u8; 3] {
     let perforation = ((x - 0.5).abs() < 0.006 || (x - 9.0).abs() < 0.006) && ((y * 36.0) as u32).is_multiple_of(2);
     if perforation {
         return [200, 200, 195];
-    }
-    if opt.green_bar && (0.62..=8.88).contains(&x) && ((y / 0.5) as u32).is_multiple_of(2) {
-        return [214, 234, 212];
     }
     [252, 251, 246]
 }
@@ -260,14 +270,18 @@ fn draw_paper(c: &mut Content, opt: &Options, s: &Sheet) {
     let (w, h) = (s.w * 72.0, s.h * 72.0);
     c.set_fill_rgb(0.988, 0.984, 0.965);
     c.rect(0.0, 0.0, w, h).fill_nonzero();
+    let strip = if opt.tractor { 0.5 } else { 0.0 };
     if opt.green_bar {
         c.set_fill_rgb(0.84, 0.918, 0.83);
         let mut y = 0.0;
         while y < s.h {
-            c.rect(0.62 * 72.0, h - (y + 0.5) * 72.0, (8.88 - 0.62) * 72.0, 0.5 * 72.0);
+            c.rect((strip + 0.12) * 72.0, h - (y + 0.5) * 72.0, (8.38 - 0.12) * 72.0, 0.5 * 72.0);
             y += 1.0;
         }
         c.fill_nonzero();
+    }
+    if !opt.tractor {
+        return;
     }
     c.set_stroke_rgb(0.72, 0.72, 0.70);
     c.set_line_width(0.5);
@@ -415,8 +429,13 @@ fn ink_raster(dots: &[Ink], opt: &Options) -> Option<(usize, usize, usize, usize
     Some((x0, y0, w, h, buf))
 }
 
-/// The document as a PDF.
+/// The document as a PDF, titled "ICON printout".
 pub fn pdf(doc: &Document, opt: &Options) -> Vec<u8> {
+    pdf_titled(doc, opt, "ICON printout")
+}
+
+/// The document as a PDF with its own title (what a PDF viewer shows for it).
+pub fn pdf_titled(doc: &Document, opt: &Options, title: &str) -> Vec<u8> {
     let s = sheet(opt);
     let mut next = 1;
     let mut alloc = || {
@@ -441,7 +460,7 @@ pub fn pdf(doc: &Document, opt: &Options) -> Vec<u8> {
     }
     pdf.catalog(catalog).pages(tree);
     pdf.pages(tree).kids(page_refs.iter().copied()).count(page_refs.len() as i32);
-    pdf.document_info(info).title(pdf_writer::TextStr("ICON printout")).producer(pdf_writer::TextStr("icon-emu"));
+    pdf.document_info(info).title(pdf_writer::TextStr(title)).producer(pdf_writer::TextStr("icon-emu"));
     for (f, r) in FONTS.iter().zip(&fonts) {
         pdf.type1_font(*r).base_font(Name(f)).encoding_predefined(Name(b"WinAnsiEncoding"));
     }
@@ -538,7 +557,7 @@ mod tests {
     fn pdf_and_preview() {
         let doc = interpret(b"Hello\r\n\x1b*\x04\x02\x00\xff\xff\x0c");
         for style in [Style::Clean, Style::Authentic] {
-            let opt = Options { style, green_bar: true, worn_ribbon: false };
+            let opt = Options { style, green_bar: true, worn_ribbon: false, tractor: style == Style::Authentic };
             let out = pdf(&doc, &opt);
             assert!(out.starts_with(b"%PDF") && out.len() > 500);
             let (w, h, px) = preview(&doc, 0, &opt, 100);

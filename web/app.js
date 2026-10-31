@@ -1385,14 +1385,18 @@ $("nv-download").addEventListener("click", () => {
 // printer has been idle for 3 seconds; the tray keeps them in this browser
 // and turns them into PDFs in the chosen look whenever one is opened.
 const prn = {
-  settings: { style: "authentic", paper: "plain", ribbon: "new" },
+  settings: { style: "authentic", paper: "torn", ribbon: "new" },
   online: local.get("icon-emu.printer-online") !== "0",
   outs: [], // { id, time, data } oldest first
   liveAt: 0,
   liveLen: -1,
 };
 try { Object.assign(prn.settings, JSON.parse(local.get("icon-emu.printer") || "{}")); } catch {}
-const prnOpts = () => [prn.settings.style, prn.settings.paper === "greenbar", prn.settings.ribbon === "worn"];
+// [style, green bar, worn ribbon, sprocket strips kept on], as printout_pdf / printout_preview take them.
+const prnOpts = () => {
+  const p = prn.settings.paper;
+  return [prn.settings.style, p.endsWith("greenbar"), prn.settings.ribbon === "worn", !p.startsWith("torn")];
+};
 function prnSaveOuts() { idbPut("printouts", prn.outs).catch(() => {}); }
 function drawPage(canvas, data, page, width) {
   const px = printout_preview(data, page, ...prnOpts(), width);
@@ -1401,13 +1405,19 @@ function drawPage(canvas, data, page, width) {
   canvas.height = h;
   canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(px.buffer, px.byteOffset, px.length), width, h), 0, 0);
 }
+const outTime = (out) => new Date(out.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 function openPdf(out, download) {
-  const blob = new Blob([printout_pdf(out.data, ...prnOpts())], { type: "application/pdf" });
+  // Its own title and file name, with the look, so each printout and each
+  // version of it can be told apart in tabs and downloads.
+  const { style, paper, ribbon } = prn.settings;
+  const look = style === "clean" ? ["clean"] : [paper, `${ribbon} ribbon`];
+  const title = `ICON printout #${out.id}, ${outTime(out)} (${look.join(", ")})`;
+  const blob = new Blob([printout_pdf(out.data, title, ...prnOpts())], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   if (download) {
     const a = document.createElement("a");
     a.href = url;
-    a.download = `icon-printout-${out.id}.pdf`;
+    a.download = `icon-printout-${out.id}-${look.join("-").replace(/ ribbon$/, "").replace(/\s+/g, "-")}.pdf`;
     a.click();
   } else {
     window.open(url, "_blank");
@@ -1425,10 +1435,9 @@ function showTray() {
     drawPage(c, out.data, 0, 256);
     c.addEventListener("click", () => openPdf(out, false));
     const pages = printout_pages(out.data);
-    const t = new Date(out.time);
     const cap = document.createElement("div");
     cap.className = "cap";
-    cap.textContent = `#${out.id} · ${pages} page${pages === 1 ? "" : "s"} · ${t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    cap.textContent = `#${out.id} · ${pages} page${pages === 1 ? "" : "s"} · ${outTime(out)}`;
     const open = document.createElement("button");
     open.textContent = "Open PDF";
     open.addEventListener("click", () => openPdf(out, false));

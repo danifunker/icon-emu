@@ -96,8 +96,8 @@ pub fn nvram_preset(name: &str) -> Result<Vec<u8>, JsError> {
     nvconfig::preset(name).map(|w| nvconfig::to_bin(&w)).ok_or_else(|| JsError::new("unknown preset"))
 }
 
-fn printout_options(style: &str, green_bar: bool, worn: bool) -> Result<icon_printer::Options, JsError> {
-    icon_printer::Options::parse(style, green_bar, worn).map_err(|e| JsError::new(&e))
+fn printout_options(style: &str, green_bar: bool, worn: bool, tractor: bool) -> Result<icon_printer::Options, JsError> {
+    icon_printer::Options::parse(style, green_bar, worn, tractor).map_err(|e| JsError::new(&e))
 }
 
 /// Pages in a print job.
@@ -106,11 +106,13 @@ pub fn printout_pages(job: &[u8]) -> u32 {
     icon_printer::interpret(job).pages.len() as u32
 }
 
-/// A print job as a PDF. `style` is `clean` or `authentic`.
+/// A print job as a PDF with the given title. `style` is `clean` or
+/// `authentic`; `tractor` keeps the sprocket strips on (otherwise they are
+/// torn off: 8.5 x 11 inches).
 #[wasm_bindgen]
-pub fn printout_pdf(job: &[u8], style: &str, green_bar: bool, worn: bool) -> Result<Vec<u8>, JsError> {
-    let opt = printout_options(style, green_bar, worn)?;
-    Ok(icon_printer::pdf(&icon_printer::interpret(job), &opt))
+pub fn printout_pdf(job: &[u8], title: &str, style: &str, green_bar: bool, worn: bool, tractor: bool) -> Result<Vec<u8>, JsError> {
+    let opt = printout_options(style, green_bar, worn, tractor)?;
+    Ok(icon_printer::pdf_titled(&icon_printer::interpret(job), &opt, title))
 }
 
 /// How far a job in progress has got: `[page, fraction]`, the page being
@@ -128,8 +130,8 @@ pub fn printout_progress(job: &[u8]) -> String {
 /// One page of a print job drawn `width` pixels wide, as RGBA (its height
 /// is the length / 4 / width). A page past the end gives blank paper.
 #[wasm_bindgen]
-pub fn printout_preview(job: &[u8], page: u32, style: &str, green_bar: bool, worn: bool, width: u32) -> Result<Vec<u8>, JsError> {
-    let opt = printout_options(style, green_bar, worn)?;
+pub fn printout_preview(job: &[u8], page: u32, style: &str, green_bar: bool, worn: bool, tractor: bool, width: u32) -> Result<Vec<u8>, JsError> {
+    let opt = printout_options(style, green_bar, worn, tractor)?;
     Ok(icon_printer::preview(&icon_printer::interpret(job), page as usize, &opt, width).2)
 }
 

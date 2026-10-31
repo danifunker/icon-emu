@@ -53,7 +53,7 @@ icon-ci script FILE [--keep-going]     # one command per line, '#' comments
 | `nvram SLOT set NAME=VALUE…` | Change settings, e.g. `nvram 1 set node=20 loaders=network`. The ROM reads them at the next power-on |
 | `nvram SLOT load FILE`, `save FILE`, `reset` | Use a 32-byte image, save one, or go back to the built-in settings |
 | `printouts` | Finished print jobs: index, slot, pages, bytes |
-| `printout N FILE.pdf [--style clean\|authentic] [--green-bar] [--worn]` | Save print job N as a PDF |
+| `printout N FILE.pdf [--style clean\|authentic] [--green-bar] [--worn] [--tractor]` | Save print job N as a PDF (authentic: torn-off 8.5 × 11 sheets unless `--tractor`) |
 | `printout-raw N FILE` | Save print job N's bytes, as the ICON sent them |
 | `printer SLOT [on\|off]` | Attach or remove a printer (the fileserver has one) |
 | `quit` | Stop the server |

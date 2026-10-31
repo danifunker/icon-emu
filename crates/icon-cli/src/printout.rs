@@ -1,17 +1,20 @@
 //! `icon-cli printout`: render a print job (the bytes the ICON sent its
 //! printer, e.g. from `icon-ci printout-raw`) as a PDF, with no machine running.
 
-const USAGE: &str = "icon-cli printout JOB.bin OUT.pdf [--style clean|authentic] [--green-bar] [--worn]
+const USAGE: &str = "icon-cli printout JOB.bin OUT.pdf [--style clean|authentic] [--green-bar] [--worn] [--tractor]
 
-JOB.bin holds the bytes the ICON sent its parallel printer (an Epson FX-80).
---style clean (default authentic) gives Letter pages with Courier text;
-authentic gives tractor-feed paper and 9-pin dots. --green-bar and --worn
-pick green-bar paper and a worn ribbon for the authentic look.";
+JOB.bin holds the bytes the ICON sent its parallel printer (a Panasonic
+KX-P1091 or Epson FX-80). --style clean (default authentic) gives Letter
+pages with Courier text; authentic gives 9-pin dots on continuous paper with
+the sprocket strips torn off (8.5 x 11, prints 1:1 on Letter). For the
+authentic look: --green-bar for green-bar paper, --worn for a worn ribbon,
+--tractor to keep the strips (a 9.5-inch sheet with holes and perforations).";
 
 /// Printout options from command-line flags.
 pub fn options(args: &[String]) -> Result<icon_printer::Options, String> {
     let style = args.iter().position(|a| a == "--style").and_then(|i| args.get(i + 1)).map_or("authentic", String::as_str);
-    icon_printer::Options::parse(style, args.iter().any(|a| a == "--green-bar"), args.iter().any(|a| a == "--worn"))
+    let flag = |f: &str| args.iter().any(|a| a == f);
+    icon_printer::Options::parse(style, flag("--green-bar"), flag("--worn"), flag("--tractor"))
 }
 
 pub fn main(argv: Vec<String>) {

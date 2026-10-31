@@ -13,17 +13,17 @@ mod font;
 mod render;
 
 pub use escp::{interpret, Document, Page};
-pub use render::{pdf, preview, Options, Style};
+pub use render::{pdf, pdf_titled, preview, Options, Style};
 
 impl Options {
-    /// Options from their names: `clean` or `authentic`, plus `green-bar`
-    /// and `worn` for the authentic look.
-    pub fn parse(style: &str, green_bar: bool, worn: bool) -> Result<Options, String> {
+    /// Options from their names: `clean` or `authentic`, plus green-bar
+    /// paper, a worn ribbon and the tractor strips kept on, for the authentic look.
+    pub fn parse(style: &str, green_bar: bool, worn: bool, tractor: bool) -> Result<Options, String> {
         let style = match style {
             "clean" => Style::Clean,
             "authentic" => Style::Authentic,
             s => return Err(format!("unknown printout style {s:?} (clean or authentic)")),
         };
-        Ok(Options { style, green_bar, worn_ribbon: worn })
+        Ok(Options { style, green_bar, worn_ribbon: worn, tractor })
     }
 }

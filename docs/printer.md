@@ -14,7 +14,7 @@ So: one 9-pin dot matrix per lab, usually a Panasonic KX-P1091 or Epson FX-80, o
 ## The two looks
 
 
-- **Authentic**: 9.5-inch continuous tractor-feed paper (sprocket holes, perforations, plain or green bar), every character printed as 9-pin dots, ribbon ink that varies along the ribbon and from pin to pin, and the small offset of bidirectional printing. A worn ribbon prints lighter and less evenly.
+- **Authentic**: continuous paper (plain or green bar), every character printed as 9-pin dots, ribbon ink that varies along the ribbon and from pin to pin, and the small offset of bidirectional printing. A worn ribbon prints lighter and less evenly. By default the sprocket strips are **torn off**, as students did: an 8.5 × 11 inch sheet that prints 1:1 on Letter paper. Keep them on (`--tractor`, or a "tractor feed" paper on the page) for the whole 9.5-inch sheet with its holes and perforations.
 - **Clean**: Letter pages with the text in Courier, selectable and searchable. Accents the ICON prints by overstriking (`'`, backspace, `e`) become one letter (`é`).
 
 Screen dumps (`/sys/print_screen`) come out sideways as bit images, as they did on paper.
@@ -39,8 +39,8 @@ Then, from any machine:
 
 A job is finished when the printer has had nothing for 3 emulated seconds.
 
-- **Web page**: the printer sits under the fileserver. Paper feeds out of it while it prints; finished printouts land in the tray below, kept in the browser. Click one for the PDF. **Look**, **Paper** and **Ribbon** apply to every printout, old ones included. **ON LINE** takes the printer off line: the ICON then waits, as with a real printer.
-- **Headless**: `icon-ci printouts`, `icon-ci printout N FILE.pdf [--style clean|authentic] [--green-bar] [--worn]`, `icon-ci printout-raw N FILE` (the bytes), `icon-ci printer SLOT on|off`. Offline: `icon-cli printout JOB.bin OUT.pdf [same options]`.
+- **Web page**: the printer sits under the fileserver. Paper feeds out of it while it prints; finished printouts land in the tray below, kept in the browser. Click one for the PDF. **Look**, **Paper** and **Ribbon** apply to every printout, old ones included; each PDF's title and file name say which look it has. **ON LINE** takes the printer off line: the ICON then waits, as with a real printer.
+- **Headless**: `icon-ci printouts`, `icon-ci printout N FILE.pdf [--style clean|authentic] [--green-bar] [--worn] [--tractor]`, `icon-ci printout-raw N FILE` (the bytes), `icon-ci printer SLOT on|off`. Offline: `icon-cli printout JOB.bin OUT.pdf [same options]`.
 
 Workstations have no printer (their `list` and `slist` then wait); `icon-ci printer SLOT on` gives one a printer.
 
