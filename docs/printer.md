@@ -39,7 +39,7 @@ Then, from any machine:
 
 A job is finished when the printer has had nothing for 3 emulated seconds.
 
-- **Web page**: the printer sits under the fileserver. Paper feeds out of it while it prints; finished printouts land in the tray below, kept in the browser. Click one for the PDF. **Look**, **Paper** and **Ribbon** apply to every printout, old ones included; each PDF's title and file name say which look it has. **ON LINE** takes the printer off line: the ICON then waits, as with a real printer.
+- **Web page**: the printer sits under the fileserver. Paper feeds out of it while it prints; finished printouts land in the tray below, kept in the browser. Click one for the PDF. **Look**, **Paper** and **Ribbon** set the next printouts: each printout keeps the look it was printed with, and its PDF's title and file name say which. **ON LINE** takes the printer off line: the ICON then waits, as with a real printer.
 - **Headless**: `icon-ci printouts`, `icon-ci printout N FILE.pdf [--style clean|authentic] [--green-bar] [--worn] [--tractor]`, `icon-ci printout-raw N FILE` (the bytes), `icon-ci printer SLOT on|off`. Offline: `icon-cli printout JOB.bin OUT.pdf [same options]`.
 
 Workstations have no printer (their `list` and `slist` then wait); `icon-ci printer SLOT on` gives one a printer.

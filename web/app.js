@@ -1382,24 +1382,26 @@ $("nv-download").addEventListener("click", () => {
 
 // ---- Printer: a Panasonic KX-P1091 (Epson FX-80 compatible) 9-pin dot
 // matrix on the fileserver's parallel port. The emulator hands over each job (the bytes the ICON sent) once the
-// printer has been idle for 3 seconds; the tray keeps them in this browser
-// and turns them into PDFs in the chosen look whenever one is opened.
+// printer has been idle for 3 seconds; the tray keeps them in this browser.
+// Like paper, each printout keeps the look (style, paper, ribbon) the printer
+// had when it came out; changing the settings only affects the next ones.
 const prn = {
   settings: { style: "authentic", paper: "torn", ribbon: "new" },
   online: local.get("icon-emu.printer-online") !== "0",
-  outs: [], // { id, time, data } oldest first
+  outs: [], // { id, time, data, look } oldest first; look is a copy of settings
   liveAt: 0,
   liveLen: -1,
 };
 try { Object.assign(prn.settings, JSON.parse(local.get("icon-emu.printer") || "{}")); } catch {}
-// [style, green bar, worn ribbon, sprocket strips kept on], as printout_pdf / printout_preview take them.
-const prnOpts = () => {
-  const p = prn.settings.paper;
-  return [prn.settings.style, p.endsWith("greenbar"), prn.settings.ribbon === "worn", !p.startsWith("torn")];
+// [style, green bar, worn ribbon, sprocket strips kept on] for a look, as
+// printout_pdf / printout_preview take them.
+const prnOpts = (look = prn.settings) => {
+  const p = look.paper;
+  return [look.style, p.endsWith("greenbar"), look.ribbon === "worn", !p.startsWith("torn")];
 };
 function prnSaveOuts() { idbPut("printouts", prn.outs).catch(() => {}); }
-function drawPage(canvas, data, page, width) {
-  const px = printout_preview(data, page, ...prnOpts(), width);
+function drawPage(canvas, data, page, width, look) {
+  const px = printout_preview(data, page, ...prnOpts(look), width);
   const h = px.length / 4 / width;
   canvas.width = width;
   canvas.height = h;
@@ -1409,10 +1411,10 @@ const outTime = (out) => new Date(out.time).toLocaleTimeString([], { hour: "nume
 function openPdf(out, download) {
   // Its own title and file name, with the look, so each printout and each
   // version of it can be told apart in tabs and downloads.
-  const { style, paper, ribbon } = prn.settings;
+  const { style, paper, ribbon } = out.look;
   const look = style === "clean" ? ["clean"] : [paper, `${ribbon} ribbon`];
   const title = `ICON printout #${out.id}, ${outTime(out)} (${look.join(", ")})`;
-  const blob = new Blob([printout_pdf(out.data, title, ...prnOpts())], { type: "application/pdf" });
+  const blob = new Blob([printout_pdf(out.data, title, ...prnOpts(out.look))], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   if (download) {
     const a = document.createElement("a");
@@ -1432,7 +1434,7 @@ function showTray() {
     card.className = "tray-card";
     const c = document.createElement("canvas");
     c.title = "Open the PDF";
-    drawPage(c, out.data, 0, 256);
+    drawPage(c, out.data, 0, 256, out.look);
     c.addEventListener("click", () => openPdf(out, false));
     const pages = printout_pages(out.data);
     const cap = document.createElement("div");
@@ -1470,7 +1472,7 @@ function printerFrame() {
   const out = net.take_printout(FS);
   if (out.length) {
     const id = (prn.outs.at(-1)?.id || 0) + 1;
-    prn.outs.push({ id, time: Date.now(), data: out });
+    prn.outs.push({ id, time: Date.now(), data: out, look: { ...prn.settings } });
     if (prn.outs.length > 50) prn.outs.shift();
     prnSaveOuts();
     showTray();
@@ -1496,7 +1498,6 @@ for (const k of ["style", "paper", "ribbon"]) {
     prn.settings[k] = e.target.value;
     local.set("icon-emu.printer", JSON.stringify(prn.settings));
     showPrinter();
-    showTray();
     prn.liveLen = -1;
   });
 }
@@ -1596,6 +1597,8 @@ net.set_ram_kb(ramKb);
 net.set_printer(FS, prn.online);
 showPrinter();
 try { prn.outs = (await idbGet("printouts")) || []; } catch {}
+// Printouts saved before each kept its own look take the current settings.
+for (const o of prn.outs) o.look ||= { ...prn.settings };
 showTray();
 machines.forEach((m, slot) => {
   const saved = local.get(NV_KEY(slot));
