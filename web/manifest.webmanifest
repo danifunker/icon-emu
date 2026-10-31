@@ -1,0 +1,15 @@
+{
+  "name": "ICON Network",
+  "short_name": "ICON",
+  "description": "An emulator of the Unisys/CEMCORP ICON and its LEXICON fileserver",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1c1d20",
+  "theme_color": "#1c1d20",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

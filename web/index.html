@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ICON Network</title>
+<link rel="icon" href="icons/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1c1d20">
 <style>
   :root {
     --bg: #1c1d20; --text: #e9e6df; --muted: #9c988f;
@@ -180,6 +185,35 @@
   code { background: #0004; padding: 1px 5px; border-radius: 4px; }
   button.nv-open { background: #f3eee2; color: #2b2a26; border: 1px solid #9d957f; border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; margin-left: auto; }
   button.nv-open.own { border-color: #b97516; box-shadow: inset 0 -2px 0 var(--amber); }
+  .fs-col { display: flex; flex-direction: column; min-width: 0; }
+  .printer { margin: 0 auto; width: min(100%, 520px); cursor: default; }
+  .pcable { width: 10px; height: 26px; margin: 0 auto; background: linear-gradient(90deg, #6c6a62, #8d8a80, #6c6a62); border-radius: 0 0 3px 3px; }
+  .paper-out { position: relative; width: 62%; height: 0; margin: 0 auto; overflow: hidden; transition: height .4s ease; }
+  .paper-out.show { height: 150px; }
+  .paper-out canvas { position: absolute; left: 0; width: 100%; image-rendering: auto; transition: top .4s linear; box-shadow: 0 0 10px #0006; }
+  .prn-body { background: linear-gradient(#e6e3d9, #d3cfc2); border: 1px solid var(--beige-edge); border-radius: 10px 10px 14px 14px;
+              box-shadow: 0 10px 30px #0006; color: #2b2a26; overflow: hidden; }
+  .prn-lid { position: relative; height: 34px; background: linear-gradient(#cfcbbf, #bdb8aa); border-bottom: 2px solid #a19c8e; }
+  .prn-window { position: absolute; left: 18%; right: 18%; top: 6px; height: 18px; border-radius: 4px; background: linear-gradient(#3d3a33cc, #24221ecc);
+                box-shadow: inset 0 2px 5px #000a; }
+  .prn-knob { position: absolute; right: -7px; top: 9px; width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 40% 40%, #6b675d, #33312c); }
+  .prn-front { display: flex; align-items: center; gap: 16px; padding: 10px 14px; }
+  .prn-name { font: 700 13px/1.1 system-ui, sans-serif; letter-spacing: .08em; color: #4a463d; }
+  .prn-name small { display: block; font-weight: 400; letter-spacing: 0; color: #6c675c; font-size: 10px; }
+  .prn-front .lamps { margin-left: auto; }
+  .prn-btn { background: #3b3a35; color: #eee; border: 0; border-radius: 5px; padding: 6px 10px; font: 600 11px system-ui, sans-serif; cursor: pointer; }
+  .prn-btn[aria-pressed="false"] { background: #8a8578; color: #f3eee2; }
+  .led.on.busy { animation: blink .18s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .prn-settings { color: var(--text); }
+  .prn-settings select { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 6px; padding: 3px 6px; font: inherit; }
+  .tray { margin-top: 10px; }
+  .tray-items { display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px 8px; }
+  .tray-card { flex: none; width: 128px; font-size: 12px; color: var(--muted); }
+  .tray-card canvas { width: 128px; height: auto; display: block; cursor: zoom-in; border-radius: 2px; box-shadow: 0 3px 10px #0007; background: #fff; }
+  .tray-card .cap { margin: 5px 0 3px; color: var(--text); }
+  .tray-card button, #tray-clear { background: #34332e; color: var(--text); border: 1px solid #55534b; border-radius: 5px; padding: 2px 7px; font: inherit; font-size: 12px; cursor: pointer; }
+  .tray-empty { font-size: 13px; color: var(--muted); }
   dialog.nv { width: min(880px, calc(100vw - 32px)); max-height: calc(100vh - 32px); border: 1px solid var(--beige-edge); border-radius: 12px;
               background: #f6f2e8; color: #2b2a26; padding: 0 0 12px; font-size: 13px; }
   dialog.nv::backdrop { background: #000a; }
@@ -223,7 +257,12 @@
       <span class="label">Boot ROM</span>
       <span class="name sub">none loaded</span>
       <label><input class="load" type="file" multiple hidden><span class="btn">Load ROM…</span></label>
+      <button id="rom-download" title="Load the ICON's Rel 2.11 boot ROM from this project's release">Download ROM</button>
       <button class="forget" hidden>Forget</button>
+    </div>
+    <div class="row">
+      <span class="sub">The Rel 2.11 boot ROM is generously donated by <a href="https://vintagecomputer.ca/the-burroughs-icon-computer/" target="_blank" rel="noopener">vintagecomputer.ca</a>
+        (<a href="https://github.com/danifunker/icon-emu/releases/tag/rom-rel2.11" target="_blank" rel="noopener">release</a>).</span>
     </div>
     <div class="row">
       <label class="sub"><input id="rom-same" type="checkbox" checked> Use the same ROM for all devices</label>
@@ -248,6 +287,7 @@
   </template>
 
   <div class="net">
+    <div class="fs-col">
     <!-- LEXICON fileserver -->
     <section class="machine" id="m0" data-slot="0">
       <h2>LEXICON fileserver <small id="status0" class="status">off</small></h2>
@@ -282,6 +322,36 @@
         <span id="hd-name" class="muted">no hard disk</span>
       </div>
     </section>
+
+    <!-- The fileserver's printer: a Panasonic KX-P1091, the 9-pin dot matrix schools used with the ICON -->
+    <section class="printer" id="printer" aria-label="Printer">
+      <div class="pcable" title="Parallel cable from the fileserver"></div>
+      <div class="paper-out" id="paper-out"><canvas id="paper-live" width="320" height="371"></canvas></div>
+      <div class="prn-body">
+        <div class="prn-lid"><span class="prn-window"></span><span class="prn-knob"></span></div>
+        <div class="prn-front">
+          <span class="prn-name">KX-P1091 <small>9-pin dot matrix printer</small></span>
+          <div class="lamps">
+            <span class="lamp"><span class="led green" id="prn-power"></span>power</span>
+            <span class="lamp"><span class="led green" id="prn-ready"></span>ready</span>
+            <span class="lamp"><span class="led amber" id="prn-online"></span>on line</span>
+          </div>
+          <button class="prn-btn" id="prn-online-btn" title="Take the printer off line (the ICON then waits) or put it back on line">ON LINE</button>
+        </div>
+      </div>
+      <div class="controls prn-settings">
+        <span class="label">Printouts</span>
+        <label>Look <select id="prn-style"><option value="authentic">Authentic dot matrix</option><option value="clean">Clean PDF</option></select></label>
+        <label>Paper <select id="prn-paper"><option value="plain">Plain tractor feed</option><option value="greenbar">Green bar</option></select></label>
+        <label>Ribbon <select id="prn-ribbon"><option value="new">New</option><option value="worn">Worn</option></select></label>
+      </div>
+      <div class="tray">
+        <div class="tray-items" id="tray"></div>
+        <p class="muted tray-empty" id="tray-empty">Nothing printed yet. Set up the printer once with <code>attach_printer n=1 d=3 t=p1091</code> (as root), then <code>print FILE</code>.</p>
+        <button id="tray-clear" hidden>Clear all printouts</button>
+      </div>
+    </section>
+    </div>
 
     <div class="coax"><div class="cable" id="cable"></div><span>ICONET<br>coax</span><span id="packets">0 packets</span></div>
 

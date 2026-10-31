@@ -135,6 +135,10 @@ House has its own QNX shell window, so this keeps students out of the prompt *af
 - `/config/net.config` lists the nodes. `verify_net` checks it against the network and fills in the hardware database.
 - If the network hangs, the fileserver may have run out of virtual circuits. `kill_vcs`, or reboot the fileserver and then every workstation ⚠.
 
+## Printing
+
+The fileserver has a dot-matrix printer (a Panasonic KX-P1091) on its parallel port. Set it up once, as `root` on the fileserver: `attach_printer n=1 d=3 t=p1091`. If that says `Node 1 not found in network`, run `verify_net` first (answer `n` to removing nodes). Then `print FILE` prints from any machine, and `/sys/print_screen` prints the screen. Printouts come out as PDFs; see [the printer notes](printer.md).
+
 ## Dates
 
 The ICON stores dates with a 4-bit year, so it can only hold **1980 to 1995**. The emulator therefore runs the ICON's clock on **today's month, day and time, in 1994**. On 29 February, which 1994 doesn't have, it uses **1992**. 1994 sorts after all the ICON system software (the last release is from 1991), and a machine left running past New Year's Eve moves into 1995, which the ICON can still store.

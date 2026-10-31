@@ -9,4 +9,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 icon-core = { path = "../icon-core" }
+icon-printer = { path = "../icon-printer" }
 wasm-bindgen = "=0.2.129"

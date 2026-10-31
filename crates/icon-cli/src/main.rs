@@ -4,6 +4,7 @@
 
 mod disk;
 mod nvram;
+mod printout;
 mod serve;
 
 use icon_core::devices::nvram::presets;
@@ -261,6 +262,9 @@ fn main() {
     }
     if argv.first().map(String::as_str) == Some("nvram") {
         return nvram::main(argv[1..].to_vec());
+    }
+    if argv.first().map(String::as_str) == Some("printout") {
+        return printout::main(argv[1..].to_vec());
     }
     let mut args = parse_args();
     let rom = std::fs::read(&args.rom).expect("read ROM");

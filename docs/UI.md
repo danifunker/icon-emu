@@ -6,7 +6,9 @@ Everything you load stays in your browser. Nothing is uploaded.
 
 ## Boot ROM
 
-Every machine needs the ICON boot ROM before it can be switched on. At the top of the page:
+Every machine needs the ICON boot ROM before it can be switched on. At the top of the page, the quickest way is **Download ROM**: it loads the **Rel 2.11** boot ROM, generously donated by [vintagecomputer.ca](https://vintagecomputer.ca/the-burroughs-icon-computer/), from this project's [rom-rel2.11 release](https://github.com/danifunker/icon-emu/releases/tag/rom-rel2.11). It is kept in your browser like a ROM loaded by hand. With this ROM, workstations need system software **4.10.05** on the fileserver (see the [rebuild guide](REBUILD.md)); it is also the ROM the 1 MB memory option needs.
+
+To use your own ROM instead:
 
 1. Click **Load ROM…**.
 2. Pick the 32 KB ROM image, or select **both** 16 KB EPROM files at once (5053-1 and 5053-2).
@@ -35,6 +37,16 @@ Every ICON keeps its settings in a small chip, the NVRAM: which devices to boot 
 - **Load .bin…** takes an image read from a real ICON's NMC9306 chip with an EPROM programmer: 32 bytes, each word low byte first. **Download .bin** saves one in the same format, for `icon-cli nvram` or for programming a chip.
 - The **Words** row shows all 16 words in hex for anything the named settings don't cover. Bits with no known meaning are listed under it.
 - With its own NVRAM, a machine's memory comes from the NVRAM, not from the **Memory** menu. The panel warns you when the two disagree; the ROM then stops at a memory error, as a real ICON would.
+
+## Printer
+
+A Panasonic KX-P1091 dot-matrix printer, the kind ICON labs shared, sits under the fileserver on its parallel port. Set it up once on the ICON with `attach_printer n=1 d=3 t=p1091` (as `root`; see [the printer notes](printer.md) if it says the node isn't found), then `print FILE` from any machine.
+
+- While a job prints, the paper feeds out of the top of the printer with the lines on it. When the printer has been idle for 3 seconds the printout drops into the tray below. The tray keeps them in this browser.
+- Click a printout (or **Open PDF**) to see it as a PDF; **Download** saves it; **✕** throws it away.
+- **Look**: **Authentic dot matrix** prints on tractor-feed paper with sprocket holes, every character in 9-pin dots and real ribbon ink; **Clean PDF** gives Letter pages with the text in Courier, which you can select and search. **Paper** (plain or green bar) and **Ribbon** (new or worn) are for the authentic look. They apply to every printout, old ones too.
+- **ON LINE** takes the printer off line. The ICON then waits for it, as it would for a real printer, and carries on when it is back on line.
+- `/sys/print_screen` prints the screen, sideways, as on paper at the time.
 
 ## Switching machines on and off
 

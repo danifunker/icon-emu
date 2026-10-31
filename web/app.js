@@ -2,6 +2,7 @@ import init, {
   Network, blank_hard_disk_10mb, blank_floppy_640k,
   disk_volumes, disk_view, disk_read, disk_put, disk_mkdir, disk_remove, disk_count, disk_copy, qnx_name, normalize_hard_disk,
   text_open, text_save, watcom_unfixed, fix_watcom, nvram_decode, nvram_set,
+  printout_pdf, printout_preview, printout_pages, printout_progress,
 } from "./pkg/icon_web.js";
 
 const FS = 0;
@@ -507,6 +508,7 @@ function power(slot) {
     if (slot === FS && hardDisk) { syncHd(); idbPut("fileserver-hd", hardDisk); }
     net.power_off(slot);
     filesPowerChanged();
+    if (slot === FS) { $("paper-out").classList.remove("show"); showPrinter(); }
     m.power.classList.remove("on");
     m.ctx.fillRect(0, 0, 640, 240);
     m.status.textContent = "off";
@@ -525,6 +527,7 @@ function power(slot) {
   m.power.classList.add("on");
   m.power.blur();
   filesPowerChanged();
+  if (slot === FS) showPrinter();
   setFocus(slot);
 }
 
@@ -677,6 +680,32 @@ for (const [key, row] of Object.entries(romRows)) {
     showRoms("forgotten: it will be asked for again next time");
   });
 }
+// The Rel 2.11 ROM, donated by vintagecomputer.ca and kept in the project's
+// rom-rel2.11 release; the site carries a copy (release files can't be fetched
+// cross-origin). It becomes the shared ROM, as if loaded by hand.
+$("rom-download").addEventListener("click", async () => {
+  const b = $("rom-download");
+  b.disabled = true;
+  b.textContent = "Downloading…";
+  try {
+    const res = await fetch("rom/icon1_rom_rel2.11_combined.bin", { cache: "no-cache" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = new Uint8Array(await res.arrayBuffer());
+    if (data.length !== 0x8000 || (await sha1(data)) !== REL_2_11) throw new Error("the file is not the Rel 2.11 ROM");
+    roms.shared = { name: "donated by vintagecomputer.ca", data };
+    try { await idbPut("rom:shared", roms.shared); } catch {}
+    if (!sameRom) {
+      sameRom = true;
+      local.set("icon-emu.same-rom", "1");
+    }
+    showRoms(applyRoms() || "downloaded; kept in this browser");
+  } catch (e) {
+    alert(`Couldn't download the ROM: ${e.message}. You can get it from the rom-rel2.11 release and use Load ROM….`);
+  } finally {
+    b.disabled = false;
+    b.textContent = "Download ROM";
+  }
+});
 $("rom-same").addEventListener("change", (e) => {
   sameRom = e.target.checked;
   local.set("icon-emu.same-rom", sameRom ? "1" : "0");
@@ -1351,6 +1380,130 @@ $("nv-download").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
+// ---- Printer: a Panasonic KX-P1091 (Epson FX-80 compatible) 9-pin dot
+// matrix on the fileserver's parallel port. The emulator hands over each job (the bytes the ICON sent) once the
+// printer has been idle for 3 seconds; the tray keeps them in this browser
+// and turns them into PDFs in the chosen look whenever one is opened.
+const prn = {
+  settings: { style: "authentic", paper: "plain", ribbon: "new" },
+  online: local.get("icon-emu.printer-online") !== "0",
+  outs: [], // { id, time, data } oldest first
+  liveAt: 0,
+  liveLen: -1,
+};
+try { Object.assign(prn.settings, JSON.parse(local.get("icon-emu.printer") || "{}")); } catch {}
+const prnOpts = () => [prn.settings.style, prn.settings.paper === "greenbar", prn.settings.ribbon === "worn"];
+function prnSaveOuts() { idbPut("printouts", prn.outs).catch(() => {}); }
+function drawPage(canvas, data, page, width) {
+  const px = printout_preview(data, page, ...prnOpts(), width);
+  const h = px.length / 4 / width;
+  canvas.width = width;
+  canvas.height = h;
+  canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(px.buffer, px.byteOffset, px.length), width, h), 0, 0);
+}
+function openPdf(out, download) {
+  const blob = new Blob([printout_pdf(out.data, ...prnOpts())], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  if (download) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `icon-printout-${out.id}.pdf`;
+    a.click();
+  } else {
+    window.open(url, "_blank");
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function showTray() {
+  const tray = $("tray");
+  tray.replaceChildren();
+  for (const out of [...prn.outs].reverse()) {
+    const card = document.createElement("div");
+    card.className = "tray-card";
+    const c = document.createElement("canvas");
+    c.title = "Open the PDF";
+    drawPage(c, out.data, 0, 256);
+    c.addEventListener("click", () => openPdf(out, false));
+    const pages = printout_pages(out.data);
+    const t = new Date(out.time);
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = `#${out.id} · ${pages} page${pages === 1 ? "" : "s"} · ${t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    const open = document.createElement("button");
+    open.textContent = "Open PDF";
+    open.addEventListener("click", () => openPdf(out, false));
+    const dl = document.createElement("button");
+    dl.textContent = "Download";
+    dl.addEventListener("click", () => openPdf(out, true));
+    const del = document.createElement("button");
+    del.textContent = "✕";
+    del.title = "Throw this printout away";
+    del.addEventListener("click", () => { prn.outs = prn.outs.filter((o) => o !== out); prnSaveOuts(); showTray(); });
+    card.append(c, cap, open, " ", dl, " ", del);
+    tray.append(card);
+  }
+  $("tray-empty").hidden = prn.outs.length > 0;
+  $("tray-clear").hidden = prn.outs.length === 0;
+}
+function showPrinter() {
+  const on = net && net.is_on(FS);
+  $("prn-power").classList.toggle("on", !!on);
+  $("prn-online").classList.toggle("on", !!on && prn.online);
+  $("prn-ready").classList.toggle("on", !!on && prn.online);
+  $("prn-online-btn").setAttribute("aria-pressed", String(prn.online));
+  for (const [k, v] of Object.entries(prn.settings)) $(`prn-${k}`).value = v;
+  $("prn-paper").disabled = $("prn-ribbon").disabled = prn.settings.style === "clean";
+}
+// The page being printed, feeding out of the top of the printer.
+function printerFrame() {
+  const busy = net.printer_busy(FS);
+  $("prn-ready").classList.toggle("busy", busy);
+  const out = net.take_printout(FS);
+  if (out.length) {
+    const id = (prn.outs.at(-1)?.id || 0) + 1;
+    prn.outs.push({ id, time: Date.now(), data: out });
+    if (prn.outs.length > 50) prn.outs.shift();
+    prnSaveOuts();
+    showTray();
+    prn.liveLen = -1;
+    $("paper-out").classList.remove("show");
+  }
+  const now = performance.now();
+  if (now - prn.liveAt < 400) return;
+  prn.liveAt = now;
+  const job = net.printer_job(FS);
+  if (!job.length || job.length === prn.liveLen) return;
+  prn.liveLen = job.length;
+  const [page, frac] = JSON.parse(printout_progress(job));
+  const c = $("paper-live");
+  drawPage(c, job, page, 320);
+  $("paper-out").classList.add("show");
+  // Keep the line being printed at the print head (the bottom of the window).
+  const shown = c.getBoundingClientRect().width / c.width;
+  c.style.top = `${150 - frac * c.height * shown}px`;
+}
+for (const k of ["style", "paper", "ribbon"]) {
+  $(`prn-${k}`).addEventListener("change", (e) => {
+    prn.settings[k] = e.target.value;
+    local.set("icon-emu.printer", JSON.stringify(prn.settings));
+    showPrinter();
+    showTray();
+    prn.liveLen = -1;
+  });
+}
+$("prn-online-btn").addEventListener("click", () => {
+  prn.online = !prn.online;
+  local.set("icon-emu.printer-online", prn.online ? "1" : "0");
+  if (net) net.set_printer(FS, prn.online);
+  showPrinter();
+});
+$("tray-clear").addEventListener("click", () => {
+  if (!confirm("Throw away every printout in the tray?")) return;
+  prn.outs = [];
+  prnSaveOuts();
+  showTray();
+});
+
 function frame() {
   requestAnimationFrame(frame);
   if (!net) return;
@@ -1383,6 +1536,7 @@ function frame() {
     m.status.textContent = net.status(slot);
   });
   $("packets").textContent = `${net.packets()} packets`;
+  if (net.is_on(FS)) printerFrame();
 }
 
 setupMachine(FS);
@@ -1430,6 +1584,10 @@ if (!roms.shared) {
   } catch {}
 }
 net.set_ram_kb(ramKb);
+net.set_printer(FS, prn.online);
+showPrinter();
+try { prn.outs = (await idbGet("printouts")) || []; } catch {}
+showTray();
 machines.forEach((m, slot) => {
   const saved = local.get(NV_KEY(slot));
   if (saved && saved.length === 64) {

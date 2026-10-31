@@ -1,5 +1,6 @@
 # Build the WebAssembly page and publish it to GitHub Pages.
-# The boot ROM is never published: visitors load their own with "Load ROM…".
+# The Rel 2.11 boot ROM donated by vintagecomputer.ca is copied in from its
+# release (rom-rel2.11) for the page's "Download ROM" button; it is never in git.
 name: Pages
 
 on:
@@ -38,11 +39,14 @@ jobs:
       - run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
       - run: cargo build --release -p icon-web --target wasm32-unknown-unknown
       - run: wasm-bindgen --target web --no-typescript --out-dir web/pkg target/wasm32-unknown-unknown/release/icon_web.wasm
-      - name: Assemble the site (no ROM)
+      - name: Assemble the site
         run: |
           mkdir -p site/rom
+          # GitHub release downloads have no CORS headers, so the page fetches its own copy.
+          curl -fsSL -o site/rom/icon1_rom_rel2.11_combined.bin https://github.com/danifunker/icon-emu/releases/download/rom-rel2.11/icon1_rom_rel2.11_combined.bin
+          echo "3750cf6f203fe1a167b853e36d30114701b039eb  site/rom/icon1_rom_rel2.11_combined.bin" | sha1sum -c -
           scripts/web-version.sh
-          cp -R web/index.html web/app.js web/version.json web/pkg site/
+          cp -R web/index.html web/app.js web/version.json web/manifest.webmanifest web/icons web/pkg site/
           cp disks/hd64-factory.bin site/rom/
           touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v5

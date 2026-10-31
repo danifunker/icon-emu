@@ -6,11 +6,13 @@ It emulates the ICON's 80186 main board well enough to run the original boot ROM
 
 **Try it in your browser: <https://danifunker.github.io/icon-emu/>**
 
-**No ROM or system software is included.** You need your own copy of the ICON boot ROM and the ICON system diskettes, as disk images. The York University Computer Museum's set is the one these instructions follow.
+**The boot ROM:** the page's **Download ROM** button loads the ICON's **Rel 2.11** boot ROM, generously donated by [vintagecomputer.ca](https://vintagecomputer.ca/the-burroughs-icon-computer/). It is kept in the [rom-rel2.11 release](https://github.com/danifunker/icon-emu/releases/tag/rom-rel2.11), not in the source. You can also load your own.
+
+**No system software is included.** You need the ICON system diskettes, as disk images. The York University Computer Museum's set is the one these instructions follow.
 
 ## Getting started
 
-1. Open the page and click **Load ROM…**. Pick the 32 KB ROM image, or select both 16 KB EPROM files at once. The ROM stays in your browser; it is never uploaded.
+1. Open the page and click **Download ROM**, or **Load ROM…** for your own (the 32 KB image, or both 16 KB EPROM files at once). The ROM stays in your browser.
 2. Follow [the rebuild guide](docs/REBUILD.md) to install the system onto a hard disk and boot a workstation.
 3. [The web page guide](docs/UI.md) explains every button, including **Files**, which copies files between your computer and the ICON's disks.
 
@@ -23,6 +25,7 @@ It emulates the ICON's 80186 main board well enough to run the original boot ROM
 | [Installing in detail](docs/INSTALL.md) | The install, step by step, for 10 MB and 64 MB hard disks, and adding packages |
 | [Administrator notes](docs/ADMIN.md) | Drives and paths, user accounts, moving files in and out, speech, MS-DOS, shutting down |
 | [Headless mode](docs/HEADLESS.md) | Running and scripting the emulator from the command line |
+| [Printer](docs/printer.md) | Printing to PDF: setting up the printer, the authentic and clean looks, the parallel port |
 
 The hardware notes ([COM9026 network chip](docs/com9026.md), [keyboard, trackball and display](docs/input_video.md), [NVRAM, clock and disk](docs/nvram_rtc_disk_install.md)) are reference material for developers.
 
@@ -43,9 +46,9 @@ If you put your ROM at the path in the `Makefile`, `make web` copies it into the
 
 The emulator is released under the **MIT License**; see [LICENSE](LICENSE).
 
-The 8086/80186 CPU core (`crates/icon-core/src/cpu/i86.rs`, `i186.rs`) and the TMS5220 speech chip (`crates/icon-core/src/devices/tms5220.rs`) are ports of MAME code. They remain under the **BSD 3-Clause License**; see [THIRD_PARTY.md](THIRD_PARTY.md). The project as a whole is therefore `MIT AND BSD-3-Clause`.
+The 8086/80186 CPU core (`crates/icon-core/src/cpu/i86.rs`, `i186.rs`) and the TMS5220 speech chip (`crates/icon-core/src/devices/tms5220.rs`) are ports of MAME code. They remain under the **BSD 3-Clause License**; see [THIRD_PARTY.md](THIRD_PARTY.md). The printer's built-in characters (`crates/icon-printer/src/font.rs`) are Adafruit's classic 5×8 font, under a two-clause **BSD License**. The project as a whole is therefore `MIT AND BSD-3-Clause AND BSD-2-Clause`.
 
-Neither license covers the ICON ROM, QNX, or any Unisys/CEMCORP software.
+Neither license covers the ICON ROM, QNX, or any Unisys/CEMCORP software. The Rel 2.11 ROM in the release is copyright CEMCORP/Burroughs/Unisys, shared for preservation and emulation.
 - `disks/hd64-factory.bin` is a blank, factory-prepared 64 MB disk template. It holds blocks written by the ICON's own `hdformat`/`fdisk` tools, including part of the QNX hard-disk loader, and is not covered by either license.
 - The blank-diskette template (`crates/icon-core/src/devices/fd640_blank.bin`) is an empty QNX directory and bitmap, as `dinit` writes them.
 
@@ -59,6 +62,8 @@ Neither license covers the ICON ROM, QNX, or any Unisys/CEMCORP software.
 - **SingleStepTests** by Daniel Balsom (MIT): the 8086/80286 test suites used to check the CPU core. They are downloaded by `scripts/fetch_cpu_tests.py` and not included. <https://github.com/SingleStepTests>
 - **York University Computer Museum (YUCoM)**: preserved and supplied the ICON ROM dumps, manuals and system diskettes this work is based on.
 - **Alan's Hyperion emulator** inspired the look of the web page, with each machine drawn in HTML/CSS. <https://github.com/alanswx/Hyperion>
+- **Adafruit GFX library** (BSD): its classic 5×8 font gives the emulated printer its built-in characters. <https://github.com/adafruit/Adafruit-GFX-Library>
+- **[pdf-writer](https://crates.io/crates/pdf-writer)** (MIT or Apache-2.0) writes the printouts' PDFs.
 - **[qnx2fs](https://crates.io/crates/qnx2fs)** (MIT) reads and writes the ICON's QNX 2 disks for the Files panel. It is shared with RustyBackup.
 - **Standard Microsystems (SMSC)**: the COM9026 datasheet, used to model the network controller.
 

@@ -1,5 +1,6 @@
 target/
 *.png
+!/web/icons/*.png
 /roms/
 /disks/*
 !/disks/hd64-factory.bin

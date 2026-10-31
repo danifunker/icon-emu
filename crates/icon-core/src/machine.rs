@@ -15,6 +15,7 @@
 
 use crate::cpu::{CpuBus, I80186};
 use crate::cpu::ChipSelects;
+use crate::devices::parallel::Parallel;
 use crate::devices::{arcnet::Com9026, counter::MwCounter, crtc::Crtc, nvram::Nvram, ppi8255::Ppi8255, serial::Sio8274, wd1002::{Disk, Wd1002}, rtc::Msm5832, tms5220::Tms5220};
 
 /// TMS5220C clock. It comes from an RC oscillator on the board; 640 kHz
@@ -108,6 +109,8 @@ pub struct Board {
     pub unknown_io: std::collections::BTreeMap<u16, u32>,
     /// The 1 MB upgrade card is fitted (`ram_kb` 1024).
     pub mem_card: bool,
+    /// The parallel printer port and the printer on it.
+    pub parallel: Parallel,
     /// Last word written to the card's port CF80 (None until written).
     pub card_latch: Option<u16>,
     /// The CPU's chip-select registers, copied by `Machine::step` when the
@@ -177,6 +180,7 @@ impl Machine {
             speech_next: 0.0,
             unknown_io: Default::default(),
             mem_card: cfg.ram_kb > 512,
+            parallel: Parallel::default(),
             card_latch: None,
             chip_selects: ChipSelects::default(),
         };
@@ -224,9 +228,9 @@ impl Machine {
         self.board.run_speech();
         // INT0 is shared by the keyboard (PA7) and disk (PA5); the kernel's
         // handler polls PPI A port A. INT2 is shared by the COM9026 (PC5) and
-        // the speech chip (PC4).
+        // the speech chip (PC4), and the printer (PPI B PC0).
         self.cpu.set_int_line(0, self.board.kbd_pending || self.board.wd.irq);
-        self.cpu.set_int_line(2, self.board.arcnet.irq() || self.board.speech_irq());
+        self.cpu.set_int_line(2, self.board.arcnet.irq() || self.board.speech_irq() || self.board.parallel.intr);
         c
     }
 
@@ -661,6 +665,9 @@ impl Board {
             }
         }
         self.arcnet.set_reset(pb & 0x02 != 0, self.ppi_b.port_a_out(), self.cycles);
+        // Printer STROBE is PPI A PC2; the data is PPI B port B, in mode 1.
+        let inte = self.ppi_b.port_c_out() & 0x04 != 0;
+        self.parallel.set_strobe(pc & 0x04 != 0, self.ppi_b.port_b_out(), inte, self.cycles);
     }
 
     /// What drives the bus at `addr` with the 1 MB card fitted.
@@ -807,7 +814,17 @@ impl Board {
                 self.ppi_a.read(((port - 0xF981) >> 1) as u8, inputs)
             }
             0xFAC1 | 0xFAC3 | 0xFAC5 | 0xFAC7 => {
-                self.ppi_b.read(((port - 0xFAC1) >> 1) as u8, [0xFF, 0xFF, 0xFF])
+                let reg = ((port - 0xFAC1) >> 1) as u8;
+                // Port C inputs: the printer's BUSY on PC6 (low = ready).
+                let pc_in = if self.parallel.online { 0xBF } else { 0xFF };
+                let v = self.ppi_b.read(reg, [0xFF, 0xFF, pc_in]);
+                if reg == 2 && self.ppi_b.control & 0x84 == 0x84 {
+                    // Group B mode 1: PC0 = INTR_B, PC1 = OBF_B (high: the
+                    // printer has taken the byte), PC2 = INTE_B.
+                    (v & !0x03) | self.parallel.intr as u8 | 0x02
+                } else {
+                    v
+                }
             }
             _ => {
                 self.note_unknown(port);
@@ -859,7 +876,12 @@ impl Board {
                 self.fa88 = val;
             }
             0xFAC1 | 0xFAC3 | 0xFAC5 | 0xFAC7 => {
-                self.ppi_b.write(((port - 0xFAC1) >> 1) as u8, val);
+                let reg = ((port - 0xFAC1) >> 1) as u8;
+                if reg == 1 {
+                    // Writing the mode 1 output port clears INTR_B.
+                    self.parallel.intr = false;
+                }
+                self.ppi_b.write(reg, val);
                 self.update_pins();
             }
             _ => self.note_unknown(port),

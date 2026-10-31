@@ -269,6 +269,38 @@ impl Server {
                     "note": if self.rig.machine(n).is_ok() && a["action"].as_str().is_some_and(|x| x != "show" && x != "save") { "the machine is on: the ROM reads the NVRAM at the next power-on" } else { "" },
                 }))
             }
+            "printouts" => Ok(json!(self
+                .rig
+                .printouts
+                .iter()
+                .enumerate()
+                .map(|(i, p)| json!({"index": i, "slot": p.slot, "bytes": p.data.len(), "seconds": p.seconds, "pages": icon_printer::interpret(&p.data).pages.len()}))
+                .collect::<Vec<_>>())),
+            "printout" => {
+                let i = a["index"].as_u64().unwrap_or(0) as usize;
+                let p = self.rig.printouts.get(i).ok_or_else(|| format!("no printout {i}"))?;
+                let opt = icon_printer::Options::parse(a["style"].as_str().unwrap_or("authentic"), a["green_bar"].as_bool().unwrap_or(false), a["worn"].as_bool().unwrap_or(false))?;
+                let doc = icon_printer::interpret(&p.data);
+                let path = s("path")?;
+                std::fs::write(&path, icon_printer::pdf(&doc, &opt)).map_err(|x| format!("{path}: {x}"))?;
+                Ok(json!({"path": path, "pages": doc.pages.len()}))
+            }
+            "printer" => {
+                let n = slot();
+                let on = a["on"].as_bool().unwrap_or(true);
+                *self.rig.printers.get_mut(n).ok_or_else(|| format!("no slot {n}"))? = on;
+                if let Ok(m) = self.rig.machine_mut(n) {
+                    m.board.parallel.online = on;
+                }
+                Ok(json!(format!("slot {n}: {}", if on { "printer attached" } else { "no printer" })))
+            }
+            "printout-raw" => {
+                let i = a["index"].as_u64().unwrap_or(0) as usize;
+                let p = self.rig.printouts.get(i).ok_or_else(|| format!("no printout {i}"))?;
+                let path = s("path")?;
+                std::fs::write(&path, &p.data).map_err(|x| format!("{path}: {x}"))?;
+                Ok(json!({"path": path, "bytes": p.data.len()}))
+            }
             "add-workstation" => Ok(json!({"slot": self.rig.add_workstation(), "node": 15 + self.rig.slots() - 1})),
             "login" => {
                 let user = a["user"].as_str().unwrap_or("root");

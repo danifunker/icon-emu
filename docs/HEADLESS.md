@@ -52,6 +52,10 @@ icon-ci script FILE [--keep-going]     # one command per line, '#' comments
 | `nvram SLOT` | The machine's NVRAM settings, as the ICON's `nv_config` reports them, and its 16 words |
 | `nvram SLOT set NAME=VALUE…` | Change settings, e.g. `nvram 1 set node=20 loaders=network`. The ROM reads them at the next power-on |
 | `nvram SLOT load FILE`, `save FILE`, `reset` | Use a 32-byte image, save one, or go back to the built-in settings |
+| `printouts` | Finished print jobs: index, slot, pages, bytes |
+| `printout N FILE.pdf [--style clean\|authentic] [--green-bar] [--worn]` | Save print job N as a PDF |
+| `printout-raw N FILE` | Save print job N's bytes, as the ICON sent them |
+| `printer SLOT [on\|off]` | Attach or remove a printer (the fileserver has one) |
 | `quit` | Stop the server |
 
 ### Files on the fileserver's disks
@@ -123,6 +127,10 @@ icon-cli nvram --fields                   # every NAME and its values
 ```
 
 The names are `loaders` (any of `floppy,network,hd,rom`, tried in that order), `board` (`fileserver` or `workstation`), `ram`, `local-floppy`, `serial-ports`, `rtc`, `keyboard`, `speech`, `node`, `server`, `boot-file`, `monitor`, `hw-serial`, `sw-serial`, `palette` and `crtc`. `wN=HEX` sets a raw word and `wN.B=0|1` sets one bit. [NVRAM, clock and disk](nvram_rtc_disk_install.md) §1 has the full map.
+
+### Printing
+
+The fileserver has a Panasonic KX-P1091 (Epson-compatible) on its parallel port. After `attach_printer` on the ICON, `print FILE` jobs collect as printouts; `icon-ci printout 0 out.pdf` saves the first. `icon-cli printout JOB.bin OUT.pdf` renders saved job bytes with no server. [The printer notes](printer.md) cover setting it up and the two looks.
 
 ## Protocol
 

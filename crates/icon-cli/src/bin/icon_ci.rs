@@ -28,6 +28,16 @@
 //!   nvram SLOT set NAME=VALUE ...  change settings (the ROM reads them at power-on)
 //!   nvram SLOT load FILE | save FILE | reset
 //!
+//! Printing. The fileserver has a Panasonic KX-P1091 (Epson FX-80 compatible)
+//! on its parallel port; a job
+//! ends when the printer has been idle for 3 emulated seconds.
+//!   printouts                      the finished jobs: index, slot, pages, bytes
+//!   printout N FILE.pdf [--style clean|authentic] [--green-bar] [--worn]
+//!                                  save job N as a PDF (default: authentic
+//!                                  tractor paper and dots; clean: Courier on Letter)
+//!   printout-raw N FILE            save job N's bytes, as sent to the printer
+//!   printer SLOT [on|off]          attach or remove a printer (from the next power-on)
+//!
 //! Files on the fileserver's disks. DISK is fd (the diskette), hd (the hard
 //! disk's first partition) or hd2 / hd3 (its other partitions). Reading works
 //! on a running machine; the diskette can be written any time, the hard disk
@@ -172,6 +182,15 @@ fn exec(sock: &mut UnixStream, reader: &mut BufReader<UnixStream>, words: &[Stri
                 _ => ("file-rm".into(), with(json!({"path": p(2)?}))),
             }
         }
+        "printouts" => ("printouts".into(), json!({})),
+        "printer" => ("printer".into(), json!({"slot": num(1, 0), "on": w(2) != "off"})),
+        "printout" => {
+            let flag = |f: &str| words.iter().any(|x| x == f);
+            let style = words.iter().position(|x| x == "--style").and_then(|i| words.get(i + 1)).cloned().unwrap_or_else(|| "authentic".into());
+            let path = std::path::absolute(w(2)).map(|p| p.display().to_string()).unwrap_or(w(2));
+            ("printout".into(), json!({"index": num(1, 0), "path": path, "style": style, "green_bar": flag("--green-bar"), "worn": flag("--worn")}))
+        }
+        "printout-raw" => ("printout-raw".into(), json!({"index": num(1, 0), "path": std::path::absolute(w(2)).map(|p| p.display().to_string()).unwrap_or(w(2))})),
         "nvram" => {
             let host = |x: String| std::path::absolute(&x).map(|p| p.display().to_string()).unwrap_or(x);
             let action = if w(2).is_empty() { "show".to_string() } else { w(2) };

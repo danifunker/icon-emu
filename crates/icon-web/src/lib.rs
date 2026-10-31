@@ -96,6 +96,43 @@ pub fn nvram_preset(name: &str) -> Result<Vec<u8>, JsError> {
     nvconfig::preset(name).map(|w| nvconfig::to_bin(&w)).ok_or_else(|| JsError::new("unknown preset"))
 }
 
+fn printout_options(style: &str, green_bar: bool, worn: bool) -> Result<icon_printer::Options, JsError> {
+    icon_printer::Options::parse(style, green_bar, worn).map_err(|e| JsError::new(&e))
+}
+
+/// Pages in a print job.
+#[wasm_bindgen]
+pub fn printout_pages(job: &[u8]) -> u32 {
+    icon_printer::interpret(job).pages.len() as u32
+}
+
+/// A print job as a PDF. `style` is `clean` or `authentic`.
+#[wasm_bindgen]
+pub fn printout_pdf(job: &[u8], style: &str, green_bar: bool, worn: bool) -> Result<Vec<u8>, JsError> {
+    let opt = printout_options(style, green_bar, worn)?;
+    Ok(icon_printer::pdf(&icon_printer::interpret(job), &opt))
+}
+
+/// How far a job in progress has got: `[page, fraction]`, the page being
+/// printed (from 0) and how much of its sheet is printed (0-1), as JSON.
+#[wasm_bindgen]
+pub fn printout_progress(job: &[u8]) -> String {
+    let doc = icon_printer::interpret(job);
+    let Some(page) = doc.pages.last() else { return "[0,0]".into() };
+    let y = page.chars.iter().map(|c| c.y).chain(page.dots.iter().map(|d| d.y)).fold(0.0f32, f32::max);
+    // The first line is 0.25 inch down an 11-inch sheet; a line is about 30/216 inch.
+    let frac = ((0.25 + (y + 30.0) / 216.0) / 11.0).clamp(0.0, 1.0);
+    format!("[{},{frac}]", doc.pages.len() - 1)
+}
+
+/// One page of a print job drawn `width` pixels wide, as RGBA (its height
+/// is the length / 4 / width). A page past the end gives blank paper.
+#[wasm_bindgen]
+pub fn printout_preview(job: &[u8], page: u32, style: &str, green_bar: bool, worn: bool, width: u32) -> Result<Vec<u8>, JsError> {
+    let opt = printout_options(style, green_bar, worn)?;
+    Ok(icon_printer::preview(&icon_printer::interpret(job), page as usize, &opt, width).2)
+}
+
 /// The QNX volumes in a disk image, as JSON `[{"label", "offset"}]`.
 #[wasm_bindgen]
 pub fn disk_volumes(image: &[u8]) -> String {
@@ -356,6 +393,8 @@ pub struct Network {
     ram_kb: u32,
     /// Each slot's own NVRAM, if it has one (see `Rig::nvram`).
     nvram: Vec<Option<[u16; 16]>>,
+    /// Which slots have a printer on their parallel port.
+    printers: Vec<bool>,
 }
 
 impl Default for Network {
@@ -369,7 +408,7 @@ impl Network {
     /// A segment with the fileserver and one ICON workstation, and no ROMs yet.
     #[wasm_bindgen(constructor)]
     pub fn new() -> Network {
-        Network { lan: Lan::new(2), kinds: vec![LEXICON.into(), ICON.into()], roms: Default::default(), ram_kb: 512, nvram: vec![None; 2] }
+        Network { lan: Lan::new(2), kinds: vec![LEXICON.into(), ICON.into()], roms: Default::default(), ram_kb: 512, nvram: vec![None; 2], printers: vec![true, false] }
     }
 
     /// Set the boot ROM for one machine kind ("lexicon", "icon"). Machines
@@ -409,6 +448,7 @@ impl Network {
         self.lan.grow();
         self.kinds.push(kind.to_string());
         self.nvram.push(None);
+        self.printers.push(false);
         Ok(self.lan.nodes.len() - 1)
     }
 
@@ -421,6 +461,7 @@ impl Network {
         self.lan.grow();
         self.kinds.pop();
         self.nvram.pop();
+        self.printers.pop();
         true
     }
 
@@ -437,7 +478,7 @@ impl Network {
         let rom = self.roms.get(kind).ok_or_else(|| JsError::new(&format!("no {kind} ROM loaded")))?.clone();
         let fs = slot == FILESERVER;
         let nvram = self.boot_nvram(slot);
-        let m = Machine::new(Config {
+        let mut m = Machine::new(Config {
             rom,
             patch_800k_floppy: false,
             ram_kb: self.ram_kb,
@@ -446,6 +487,7 @@ impl Network {
             host_time: host_time as i64,
             disk_controller: fs,
         });
+        m.board.parallel.online = self.printers.get(slot).copied().unwrap_or(false);
         self.lan.power_on(slot, m);
         Ok(())
     }
@@ -485,6 +527,38 @@ impl Network {
             m.board.nvram.words = w;
         }
         Ok(())
+    }
+
+    /// Attach or remove the printer on a slot's parallel port. With none (or
+    /// switched off-line) the ICON waits, as for a real printer off-line.
+    pub fn set_printer(&mut self, slot: usize, on: bool) {
+        if let Some(p) = self.printers.get_mut(slot) {
+            *p = on;
+        }
+        if let Some(m) = self.m_mut(slot) {
+            m.board.parallel.online = on;
+        }
+    }
+
+    pub fn has_printer(&self, slot: usize) -> bool {
+        self.printers.get(slot).copied().unwrap_or(false)
+    }
+
+    /// A finished print job from the slot's printer (empty if none): the
+    /// bytes sent, once the printer has been idle for 3 emulated seconds.
+    pub fn take_printout(&mut self, slot: usize) -> Vec<u8> {
+        let idle = (icon_core::session::PRINT_IDLE * CPU_HZ as f64) as u64;
+        self.m_mut(slot).and_then(|m| m.board.parallel.take_job(m.board.cycles, idle)).unwrap_or_default()
+    }
+
+    /// The job the slot's printer is printing now, so far.
+    pub fn printer_job(&self, slot: usize) -> Vec<u8> {
+        self.m(slot).map(|m| m.board.parallel.job.clone()).unwrap_or_default()
+    }
+
+    /// The printer received a byte in the last half second.
+    pub fn printer_busy(&self, slot: usize) -> bool {
+        self.m(slot).is_some_and(|m| m.board.parallel.active(m.board.cycles, CPU_HZ as u64 / 2))
     }
 
     /// True if the ICON wrote its NVRAM since the last call (then clears the flag).

@@ -83,7 +83,25 @@ pub struct Rig {
     /// (instead of the built-in image for the slot and `ram_kb`), and kept
     /// at power-off with whatever the ICON wrote to it, as the real EEPROM.
     pub nvram: Vec<Option<[u16; 16]>>,
+    /// Finished print jobs from every machine's parallel port, oldest first.
+    pub printouts: Vec<Printout>,
+    /// Which slots have a printer on their parallel port (from their next
+    /// power-on; default: the fileserver's only, as at most schools).
+    pub printers: Vec<bool>,
 }
+
+/// One print job: the bytes a machine sent its printer, ended by the
+/// printer going idle for [`PRINT_IDLE`] seconds.
+#[derive(Clone, Debug)]
+pub struct Printout {
+    pub slot: usize,
+    pub data: Vec<u8>,
+    /// Emulated seconds when it finished.
+    pub seconds: f64,
+}
+
+/// Seconds without a byte that end a print job.
+pub const PRINT_IDLE: f64 = 3.0;
 
 /// UTC seconds: the default `Rig::clock` (the core has no time-zone data).
 pub fn utc_now() -> i64 {
@@ -107,6 +125,8 @@ impl Rig {
             boot_timeout: 180.0,
             command_timeout: 300.0,
             nvram: vec![None; slots],
+            printouts: Vec::new(),
+            printers: (0..slots).map(|s| s == FILESERVER).collect(),
         })
     }
 
@@ -120,6 +140,7 @@ impl Rig {
         self.lan.grow();
         self.consoles.push(Console::default());
         self.nvram.push(None);
+        self.printers.push(false);
         self.lan.nodes.len() - 1
     }
 
@@ -143,6 +164,7 @@ impl Rig {
         if let Some(fd) = floppy {
             m.board.insert_floppy(Some(Disk::floppy_from_image(fd).ok_or_else(|| SessionError::BadImage("unknown floppy image size".into()))?));
         }
+        m.board.parallel.online = self.printers[FILESERVER];
         self.lan.power_on(FILESERVER, m);
         self.consoles[FILESERVER] = Console::default();
         Ok(())
@@ -155,7 +177,7 @@ impl Rig {
             return Err(SessionError::NoSuchNode(slot));
         }
         let nv = self.boot_nvram(slot);
-        let m = Machine::new(Config {
+        let mut m = Machine::new(Config {
             rom: self.workstation_rom.clone().unwrap_or_else(|| self.rom.clone()),
             patch_800k_floppy: false,
             ram_kb: self.ram_kb,
@@ -164,6 +186,7 @@ impl Rig {
             host_time: (self.clock)(),
             disk_controller: false,
         });
+        m.board.parallel.online = self.printers[slot];
         self.lan.power_on(slot, m);
         self.consoles[slot] = Console::default();
         Ok(())
@@ -367,6 +390,20 @@ impl Rig {
                     merge_scroll(&mut c.transcript, &c.last_screen, &lines);
                     c.last_screen = lines;
                 }
+            }
+        }
+        self.collect_printouts();
+    }
+
+    /// Move finished print jobs from the machines into `printouts`.
+    fn collect_printouts(&mut self) {
+        let idle = (PRINT_IDLE * CPU_HZ as f64) as u64;
+        let seconds = self.seconds();
+        for (slot, m) in self.lan.nodes.iter_mut().enumerate() {
+            let Some(m) = m.as_mut() else { continue };
+            let now = m.board.cycles;
+            if let Some(data) = m.board.parallel.take_job(now, idle) {
+                self.printouts.push(Printout { slot, data, seconds });
             }
         }
     }

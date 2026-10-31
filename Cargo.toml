@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/icon-core", "crates/icon-cli", "crates/icon-web"]
+members = ["crates/icon-core", "crates/icon-printer", "crates/icon-cli", "crates/icon-web"]
 
 [workspace.package]
 edition = "2021"
