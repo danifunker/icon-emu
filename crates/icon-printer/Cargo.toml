@@ -6,5 +6,5 @@ license = "MIT AND BSD-2-Clause"
 description = "An Epson FX-80 dot-matrix printer for icon-emu: ESC/P to PDF, clean or with tractor paper and ribbon ink"
 
 [dependencies]
-pdf-writer = "0.15"
-miniz_oxide = "0.9"
+pdf-writer = "0.15.0"
+miniz_oxide = "0.9.1"

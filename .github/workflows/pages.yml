@@ -36,7 +36,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       # Must match the wasm-bindgen version in Cargo.lock.
-      - run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - run: cargo install wasm-bindgen-cli --version 0.2.130 --locked
       - run: cargo build --release -p icon-web --target wasm32-unknown-unknown
       - run: wasm-bindgen --target web --no-typescript --out-dir web/pkg target/wasm32-unknown-unknown/release/icon_web.wasm
       - name: Assemble the site

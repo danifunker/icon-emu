@@ -6,10 +6,10 @@ license.workspace = true
 
 [dependencies]
 # The ICON kept local time: turning its file dates into host times needs the time zone.
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 icon-core = { path = "../icon-core" }
 icon-printer = { path = "../icon-printer" }
-serde_json = "1"
+serde_json = "1.0.154"
 
 [[bin]]
 name = "icon-cli"
