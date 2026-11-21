@@ -195,10 +195,13 @@ pub mod presets {
     }
 
     /// ICON fileserver, node 1: floppy then hard disk, 512 KB.
+    /// Both presets have a Roland Colour CC-141 monitor, as the two real
+    /// NVRAMs read so far do: w13 bits 2-3 = 2 (FFFB) and w8 high byte (CRTC
+    /// R7) = 3C. An unprogrammed w13 (FFFF) would read as Roland mono.
     pub fn fileserver() -> [u16; 16] {
         [
             0x998A, 0x5173, 0x3C01, 0x5173, 0x3C01, 0x2838, 0x442C, 0x0041,
-            0x3D3C, 0x0300, 0x0101, 0xF4F4, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF,
+            0x3C3C, 0x0300, 0x0101, 0xF4F4, 0x0000, 0xFFFB, 0xFFFF, 0xFFFF,
         ]
     }
 
@@ -209,7 +212,7 @@ pub mod presets {
     pub fn workstation() -> [u16; 16] {
         [
             0xEC2E, 0x5173, 0x3C02, 0x5173, 0x3C02, 0x2838, 0x442C, 0x0041,
-            0x3D3C, 0x0300, 0x1001, 0xF4F4, 0x0001, 0xFFFF, 0xFFFF, 0xFFFF,
+            0x3C3C, 0x0300, 0x1001, 0xF4F4, 0x0001, 0xFFFB, 0xFFFF, 0xFFFF,
         ]
     }
 }

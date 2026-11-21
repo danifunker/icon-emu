@@ -141,7 +141,7 @@ At boot, kernel init (`009C:4F6A`–`5690`) copies words into the sysblock (far 
 * w1/w2 = 5173 3C01 (serial "105-870315-001"); w3/w4 the same.
 
 ```
-998A 5173 3C01 5173 3C01 2838 442C 0041 3D3C 0300 0101 F4F4 0000 FFFF FFFF FFFF
+998A 5173 3C01 5173 3C01 2838 442C 0041 3C3C 0300 0101 F4F4 0000 FFFB FFFF FFFF
 ```
 
 **(b) ICON workstation, node 16, boots from server 1 (ws_boot), 512 KB, keyboard, no RTC, no pedestal floppy:**
@@ -149,9 +149,10 @@ At boot, kernel init (`009C:4F6A`–`5690`) copies words into the sysblock (far 
 * w0 = E000 (network only) | 0800 | 0020 (no RTC) | 0008 | 0004 (workstation) | 0002 = **E82E**.
   * Add 0100 (→ **E92E**) if the emulator has no TMS5220. Clear bit 3 (E826) if the 1797 pedestal floppy is emulated.
 * w12 = 0001; use 0002 for ws_fsys_boot.
+* Both presets have a Roland Colour CC-141, like the real machines in (c): w13 = FFFB (bits 2–3 = 2) and w8 = 3C3C (R7 = 3C). The ROM's defaults leave w13 at FFFF, which reads as a Roland monochrome monitor.
 
 ```
-E82E 5173 3C02 5173 3C02 2838 442C 0041 3D3C 0300 1001 F4F4 0001 FFFF FFFF FFFF
+E82E 5173 3C02 5173 3C02 2838 442C 0041 3C3C 0300 1001 F4F4 0001 FFFB FFFF FFFF
 ```
 
 **(c) Two images read from a real 1 MB ICON with a chip programmer (2025).** The files store each word **low byte first**, so the bytes `7D 06` are w0 = 067D. Each was decoded with `icon-cli nvram`. The fileserver one boots icon-emu to `Login:` (Rel 2.11 ROM, `--ram-kb 1024`), and `nv_config` run there prints what the real machine printed.
