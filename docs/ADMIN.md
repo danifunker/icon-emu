@@ -228,6 +228,21 @@ The Watcom Pascal 3.00 diskette (in the YUCoM `Programming` folder) installs wit
 
 In input mode, a cursor or function key switches to screen editing, and the **Scrn/Cmd** key (F9) switches back. In `pascal`, the bottom line shows the function keys (F10 is Help).
 
+## OESS programs: Tour of the Universe
+
+OESS programs (the Ontario educational software, installed under `/oess`) were written to start from the OESS menu, under Ambience, with the window manager already running. That menu isn't part of system 4.10. **Start the window manager first**, then the program, from a workstation:
+
+```
+/sys/win_mgr &
+/oess/tour/tourmain
+```
+
+The `&` matters: `win_mgr` is a server that never finishes, so without it the shell waits for ever (power the workstation off and on to get out). With it, the shell prints the new task's ID and gives you the prompt back.
+
+**Without that first step Tour shows a broken title screen** (the lettering and a frame, a small empty box at the top right, no text) and goes no further. Tour then starts the window manager itself, which QNX loads just after Tour's data. When Tour's buffers grow, QNX moves its data segment in the middle of Tour's start-up, and Tour puts back a segment register (ES) it saved before the move. The window library builds every request through ES, so the window manager gets zeros and refuses to make Tour's window. It prints `create_window returned -24`, and then the wrong error text: Tour's own message table is off by one, so window-create failures say `set_window_coord()` and coordinate failures say `load_icon()`. This is the program's behaviour, not the emulator's.
+
+`/oess/tourcntrl`, the OESS launcher, just returns to the prompt when run from the shell. Tour's background comes out olive rather than the dark blue it asks for: Tour never tells the window manager the monitor type, so the window manager treats the screen as monochrome and writes a grey level (3) into the palette.
+
 ## QDOS (MS-DOS)
 
 - Pseudo-disks are ordinary QNX files: `.pf` files are 160–360K floppy images, `.ph` files are hard-disk images up to 32 MB.
