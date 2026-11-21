@@ -207,7 +207,7 @@ Open **Type text into the selected machine** on the web page, paste `hello.paste
 
 The Watcom Pascal 3.00 diskette (in the YUCoM `Programming` folder) installs with `install_software`. It provides `pascal`, a full-screen Pascal editor and interpreter, and `wedit`, Watcom's general editor, with help in `/util/watcom/wedit/help`.
 
-**Fix them first on system 4.10.** Watcom's 1987 programs show a **blank red screen** on system 4.10. They keep working, but everything is drawn red on red. They read the screen colours from a kernel setting whose format changed between system 4.01 and 4.10, and they set all four colours to red. This happens on real ICONs too, not just in the emulator. The fix changes one byte in each program, works on both 4.01 and 4.10, and keeps the files' permissions and dates:
+**Fix them first on system 4.10.** Watcom's 1987 programs show a **blank blue screen** on system 4.10. They keep working, but everything is drawn dark blue on dark blue. They read the screen colours from a kernel setting whose format changed between system 4.01 and 4.10, and they set all four colours to the background's dark blue. This happens on real ICONs too, not just in the emulator. The fix changes one byte in each program, works on both 4.01 and 4.10, and keeps the files' permissions and dates:
 - on the web page, open `/util` in **Files**. A notice names the affected programs; click **Fix** (with every machine off, for the hard disk);
 - headless: `icon-cli disk IMAGE fix-watcom`.
 

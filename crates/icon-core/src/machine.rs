@@ -584,13 +584,16 @@ impl Board {
     /// Render the display as 640x240 RGBA. 1 bpp: pixel 0 -> F900, pixel 1
     /// -> F906. 2 bpp (320 wide, doubled): value v -> F900 + 2v. LSB = left.
     pub fn render_rgba(&self) -> Vec<u8> {
-        // CGA RGBI as the ICON2's ICON emulator renders it (12-bit RGB).
-        const RGBI: [u16; 16] = [
-            0x000, 0x00A, 0x090, 0x0BA, 0xB00, 0x909, 0x990, 0x999,
-            0x333, 0x00F, 0x0F0, 0x0FF, 0xF00, 0xF0F, 0xFF0, 0xFFF,
+        // Palette nibble -> 12-bit RGB. Bit 0 is red and bit 2 blue (IBGR, the
+        // reverse of CGA): system 4.10's `set_colour` and its help name 1
+        // "dark red", 3 "dark yellow", 4 "dark blue", 6 "dark turquoise", so the
+        // NVRAM default F4F4 is white on dark blue. Levels are the ICON2's.
+        const IBGR: [u16; 16] = [
+            0x000, 0xA00, 0x090, 0xAB0, 0x00B, 0x909, 0x099, 0x999,
+            0x333, 0xF00, 0x0F0, 0xFF0, 0x00F, 0xF0F, 0x0FF, 0xFFF,
         ];
         let rgb = |i: u8| {
-            let c = RGBI[(i & 15) as usize];
+            let c = IBGR[(i & 15) as usize];
             [((c >> 8) & 15) as u8 * 17, ((c >> 4) & 15) as u8 * 17, (c & 15) as u8 * 17, 255]
         };
         let one_bpp = self.ppi_a.port_b_out() & 4 != 0;

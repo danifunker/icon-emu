@@ -151,7 +151,7 @@ pub fn copy(
 // from the high nibble of the word's *low byte*: right for the 4.01 kernel,
 // which keeps NVRAM's palette word there as it is (F4F4), wrong for 4.10,
 // which stores one nibble per register (FF44). On a 4.10 system every
-// register becomes 4 and the screen is red on red. Taking registers 2-3 from
+// register becomes 4 and the screen is dark blue on dark blue. Taking registers 2-3 from
 // the high nibble of the *high byte* (`mov ah,bh` for `mov ah,bl`) is right
 // for both kernels.
 

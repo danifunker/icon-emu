@@ -415,7 +415,7 @@ Four write-only 4-bit colour registers [C].
 - **Kernel load from NVRAM word 11** (kern:73E6):
   - 2 bpp: F900..F906 get nibbles 0..3.
   - 1 bpp: F900 = F902 = nibble 0, F904 = F906 = nibble 1.
-- **ROM default** when the NVRAM is bad (ROM:067C, AX=F4F4h): F900=4, F902=F, F904=4, F906=F. That is a red screen with white text in 1 bpp mode.
+- **ROM default** when the NVRAM is bad (ROM:067C, AX=F4F4h): F900=4, F902=F, F904=4, F906=F. That is a dark blue screen with white text in 1 bpp mode, the ICON's usual look.
 - **ICON2 emulation:** in 1 bpp mode it swaps F902 and F906 into its 4-entry table (icon_emul 0xB54/0xBA8).
 - Only the reading "**1 bpp pixel p uses colour index 3·p**" (pixel 0 → F900, pixel 1 → F906) is consistent with all three writers [I].
 
@@ -430,7 +430,12 @@ Four write-only 4-bit colour registers [C].
 - icon_emul's ICON→ICON2 colour table (file 0xBFE), as 12-bit RGB:
   - `0:000 1:00A 2:090 3:0BA 4:B00 5:909 6:990 7:999 8:333 9:00F A:0F0 B:0FF C:F00 D:F0F E:FF0 F:FFF`
   
-So **bit0 = Blue, bit1 = Green, bit2 = Red, bit3 = Intensity**: 0–7 are ~60 % levels, 8 is dark grey, 9–F are full. Use the icon_emul table for rendering.
+Read as (R, G, B) and as 0xRGB, both tables give the CGA order (bit0 = blue). **The screen shows red and blue the other way round: bit0 = Red, bit1 = Green, bit2 = Blue, bit3 = Intensity** [C]:
+- System 4.10's `/util/set_colour` writes choice *n* as nibble *n* − 1 and names them, as does its help file: 0 black, **1 dark red**, 2 dark green, **3 dark yellow**, **4 dark blue**, 5 dark violet, **6 dark turquoise**, 7 grey, 8 dark grey, 9 red, A green, B yellow, C blue, D violet, E turquoise, F white. With the NVRAM default F4F4 it reports "Colour 0 is dark blue, Colour 1 is white".
+- gred's `set_a_colr` (`/gred/gutil.c`, 1985) calls `set_colour_map(c, 0,3000,3000)` "DARK YELLOW" and `(3000,3000,0)` "DARK TURQUOISE": what its author saw with the kernel's (R, G, B) arguments landing on swapped wires.
+- So the kernel's tables are in CGA order but the hardware is wired IBGR, and icon_emul's 12-bit value is probably 0xBGR.
+
+The emulator renders the icon_emul levels with red and blue exchanged: `0:000 1:A00 2:090 3:AB0 4:00B 5:909 6:099 7:999 8:333 9:F00 A:0F0 B:FF0 C:00F D:F0F E:0FF F:FFF`. 0–7 are ~60 % levels, 8 is dark grey, 9–F are full.
 
 **Monochrome:**
 - `int 5Ch` function 0Eh (set colour, kern:748B) maps a 2-bit-per-component RGB to a nibble through the 64-byte table at kern:755D. It uses the high nibble (a grey level) when `sys+6Eh` bit 2 is set [C].
@@ -478,7 +483,7 @@ INT 64h is hooked too. Facts confirmed for the ICON:
 - **F983 bit0** = display page flip, **bit2** = 1 bpp/2 bpp mode, **bits 5–7** = Microwire select. Bits 1, 3 and 4 are not emulated.
 - **F985 bit7** toggles (sync). **F985 bit6** = Microwire DO.
 - **PC3** = speaker.
-- **Palette nibbles are RGBI** (table above).
+- **Palette nibbles are CGA RGBI in its colour table**; the ICON's screen shows them with red and blue exchanged (see the palette section above).
 - **[I] ICON2 CPU:** the ICON2 has an 80186 peripheral control block relocated to **F600h**. FFxx accesses are forwarded to FFxx − 0x900, which suggests an 80186-family CPU. This answers part of HW-1.
 - **ICON2 video registers:** F700 (mode, low 3 bits), F708 (display base = segment − 2; a 4-word palette header sits at seg−2:0000), F7E0 (sound).
 

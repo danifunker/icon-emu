@@ -945,7 +945,7 @@ function frefresh() {
   const broken = fl.path === "/util" ? JSON.parse(watcom_unfixed(fimage(fl.src), fl.src.offset)) : [];
   $("files-notice").hidden = broken.length === 0;
   if (broken.length) {
-    $("fn-text").textContent = `${broken.map((p) => p.split("/").pop()).join(" and ")} (Watcom Pascal 3.00, 1987) ${broken.length === 1 ? "shows" : "show"} a blank red screen on ICON system 4.10, whose kernel stores the screen colours differently. Fix changes one byte, keeping permissions and dates.`;
+    $("fn-text").textContent = `${broken.map((p) => p.split("/").pop()).join(" and ")} (Watcom Pascal 3.00, 1987) ${broken.length === 1 ? "shows" : "show"} a blank blue screen on ICON system 4.10, whose kernel stores the screen colours differently. Fix changes one byte, keeping permissions and dates.`;
   }
 }
 $("fn-fix").addEventListener("click", () => {
